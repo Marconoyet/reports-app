@@ -1,9 +1,11 @@
-from flask import Flask
-from backend.api import api_bp
-from backend.db import init_db  # Import the MongoDB initialization function
-from config import Config  # Import the configuration
-from flask import Flask
 from flask_cors import CORS
+from config import Config  # Import the configuration
+from db import init_db  # Import the MongoDB initialization function
+from api import api_bp
+from flask import Flask
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Enable CORS for all routes
 app = Flask(__name__)
