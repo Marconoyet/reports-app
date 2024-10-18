@@ -1,6 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData
-from backend.backend.config import Config  # Import the configuration class
+from config import Config  # Import the configuration class
 # Create a MetaData object with a default schema
 
 default_metadata = MetaData(schema='u704613426_reports')
