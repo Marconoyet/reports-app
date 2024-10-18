@@ -1,6 +1,6 @@
 from flask import Flask
-from backend.api import api_bp
-from backend.db import init_db  # Import the MongoDB initialization function
+from api import api_bp
+from db import init_db  # Import the MongoDB initialization function
 from config import Config  # Import the configuration
 from flask import Flask
 from flask_cors import CORS
