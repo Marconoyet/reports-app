@@ -1,7 +1,6 @@
 
 annotated-types==0.7.0
 aspose-pdf==24.8.0
-comtypes==1.4.7
 Flask==3.0.3
 Flask-Cors==3.0.10
 Flask-Limiter==3.3.1
