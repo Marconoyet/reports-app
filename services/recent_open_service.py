@@ -15,10 +15,10 @@ def add_recent_open(recent_open_data):
             f"Service Error - Could not add recent open entry: {e}")
 
 
-def list_recent_open():
+def list_recent_open(user_id):
     """Business logic for listing all recent open entries."""
     try:
-        return list_recent_open_db()
+        return list_recent_open_db(user_id)
     except DatabaseError as e:
         raise Exception(
             f"Service Error - Could not list recent open entries: {e}")

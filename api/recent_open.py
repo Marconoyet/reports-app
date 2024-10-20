@@ -21,7 +21,8 @@ def add_new_recent_open():
 @recent_open_bp.route('/list', methods=['GET'])
 def get_recent_open_list():
     try:
-        recent_open_list = list_recent_open()
+        user_id = request.args.get('user_id')
+        recent_open_list = list_recent_open(user_id)
         return jsonify({"status": "success", "data": recent_open_list}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
