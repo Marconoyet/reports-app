@@ -13,6 +13,7 @@ from db.reports import (
     add_report_db,
     get_report_db,
     delete_report_db,
+    update_report_db,
     get_file_of_report
 )
 from db.files import upload_file_db
@@ -21,7 +22,6 @@ from services.services_utiliy import extract_first_image_from_slide
 from datetime import datetime
 import threading
 from flask import current_app
-
 
 
 def allowed_file(filename):
@@ -45,13 +45,12 @@ def add_report(report_data):
             # Step 2: Convert the image to binary data
             image_bytes = first_image_stream.getvalue()
 
-
             # Step 3: Insert report metadata into MySQL
             report_metadata = {
                 "template_name": report_data.get('reportName'),
                 "template_description": report_data.get('reportDescription'),
-                "template_image": image_bytes,  
-                "user_id": int(report_data.get('userId')), 
+                "template_image": image_bytes,
+                "user_id": int(report_data.get('userId')),
                 "folder_id": int(report_data.get('folderId')),
                 "template_file": file_stream,
                 "created_time": datetime.now()
@@ -64,10 +63,10 @@ def add_report(report_data):
 
         else:
             raise Exception("Invalid file type or no file uploaded.")
-    
+
     except SQLAlchemyError as e:
         raise Exception(f"Database operation failed: {e}")
-    
+
     except Exception as e:
         raise Exception(f"Service Error - Could not add report: {e}")
 
@@ -88,7 +87,15 @@ def delete_report(report_id):
         raise Exception(f"Service Error - Could not delete report: {e}")
 
 
-def generate_pptx_report(replacements, report_id):
+def update_report(report_id, updated_data):
+    """Business logic for deleting a report."""
+    try:
+        return update_report_db(report_id, updated_data)
+    except DatabaseError as e:
+        raise Exception(f"Service Error - Could not delete report: {e}")
+
+
+def generate_pptx_report(replacements, report_id, report_name):
     report = get_file_of_report(report_id)
     file_data = report.template_file
     presentation = Presentation(BytesIO(file_data))
@@ -111,16 +118,18 @@ def generate_pptx_report(replacements, report_id):
 
     # Start a background thread to handle the file upload process
     app = current_app._get_current_object()
-    threading.Thread(target=upload_pptx_in_background, args=(output_stream, report,app)).start()
+    threading.Thread(target=upload_pptx_in_background,
+                     args=(output_stream, report, app, report_name)).start()
 
     # Return the stream to the client
     return output_stream
 
 
-def upload_pptx_in_background(output_stream, report, app):
+def upload_pptx_in_background(output_stream, report, app, report_name):
     # Prepare the report for upload
-    report.template_file = output_stream.getvalue()  # Read the stream into binary for upload
-    neededData = prepareReportForUpload(report)
+    # Read the stream into binary for upload
+    report.template_file = output_stream.getvalue()
+    neededData = prepareReportForUpload(report, report_name)
 
     # Upload the file to the database in a background thread
 
@@ -133,8 +142,7 @@ def upload_pptx_in_background(output_stream, report, app):
             print(f"Error uploading file in background: {e}")
 
 
-
-def prepareReportForUpload(report):
+def prepareReportForUpload(report, report_name):
     try:
         # Try to convert the report to a dictionary
         report_data = report.to_dict()
@@ -150,14 +158,17 @@ def prepareReportForUpload(report):
             raise ValueError("The report has no associated template file.")
         if isinstance(file, bytes):
             file_binary_data = file
-            file_io = BytesIO(file_binary_data)  # Wrap bytes in BytesIO for further operations
+            # Wrap bytes in BytesIO for further operations
+            file_io = BytesIO(file_binary_data)
         else:
             raise ValueError("Unexpected file format")
         first_image_stream = extract_first_image_from_slide(file_io)
         image_bytes = first_image_stream.getvalue()
     except AttributeError as e:
-        print(f"Error accessing the report file or file-related attributes: {e}")
-        raise Exception(f"Error accessing the report file or file-related attributes: {e}")
+        print(
+            f"Error accessing the report file or file-related attributes: {e}")
+        raise Exception(
+            f"Error accessing the report file or file-related attributes: {e}")
     except Exception as e:
         print(f"Error processing the template file: {e}")
         raise Exception(f"Error processing the template file: {e}")
@@ -165,11 +176,13 @@ def prepareReportForUpload(report):
     try:
         # Prepare the report metadata
         report_metadata = {
-            "report_name": report_data.get("template_name"),  # Report name
+            "report_name": report_name,  # Report name
             "template_id": report_data.get("id"),  # Template ID (foreign key)
             "report_file": file_binary_data,                            # Binary file data
-            "report_image": image_bytes,                    # Optional image binary data (if applicable)
-            "user_id": report_data.get("user_id"),          # User ID (foreign key)
+            # Optional image binary data (if applicable)
+            "report_image": image_bytes,
+            # User ID (foreign key)
+            "user_id": report_data.get("user_id"),
             "created_time": datetime.now()                  # Current timestamp
         }
 
@@ -180,7 +193,8 @@ def prepareReportForUpload(report):
         raise Exception(f"Missing required report data: {e}")
     except Exception as e:
         print(e)
-        raise Exception(f"An unexpected error occurred while preparing report metadata: {e}")
+        raise Exception(
+            f"An unexpected error occurred while preparing report metadata: {e}")
 
 
 def get_report_and_extract_fields(report_id):
@@ -257,5 +271,3 @@ def extract_pdf_fields(file_id):
 
     document.close()
     return fields
-
-

@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file
-from services.reports_service import add_report, get_report, delete_report
+from services.reports_service import add_report, get_report, delete_report, update_report
 from services.reports_service import generate_pptx_report, get_report_and_extract_fields
 reports_bp = Blueprint('reports', __name__)
 
@@ -12,15 +12,15 @@ def create_new_report():
         report_description = request.form.get('reportDescription')
         folder_id = request.form.get('folderId')
         file = request.files.get('file')  # Get the file from the request
-        userId = request.form.get('userId')  
-        folderId = request.form.get('folderId')  
+        userId = request.form.get('userId')
+        folderId = request.form.get('folderId')
         # Prepare the data to pass to the service layer
         data = {
             "reportName": report_name,
             "reportDescription": report_description,
             "folderId": folder_id,
-            "file": file ,
-            "userId":userId,
+            "file": file,
+            "userId": userId,
             "folderId": folderId
         }
 
@@ -43,6 +43,17 @@ def get_report_data(report_id):
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@reports_bp.route('/<report_id>', methods=['PUT'])
+def update_report_data(report_id):
+    try:
+        updated_data = request.json
+        update_report(report_id, updated_data)
+
+        return jsonify({"status": "success", "message": "Report updated successfully"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @reports_bp.route('/<report_id>', methods=['DELETE'])
 def delete_report_data(report_id):
     try:
@@ -56,7 +67,7 @@ def delete_report_data(report_id):
 def extract_fields(report_id):
     try:
         fields = get_report_and_extract_fields(report_id)
-        return jsonify({"status": "success", "data": fields, "report_id":report_id}), 200
+        return jsonify({"status": "success", "data": fields, "report_id": report_id}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -66,10 +77,12 @@ def generate_report_api():
     try:
         data = request.json
         report_id = data.get('report_id')
+        report_name = data.get('report_name')
         filetype = data.get('filetype')
         # Check file extension and handle accordingly
         if filetype.endswith('pptx'):
-            pptx_data = generate_pptx_report(data['replacements'], report_id)
+            pptx_data = generate_pptx_report(
+                data['replacements'], report_id, report_name)
             return send_file(pptx_data, as_attachment=True, download_name="modified_presentation.pptx")
         else:
             return jsonify({"status": "error", "message": "Unsupported file type"}), 400
