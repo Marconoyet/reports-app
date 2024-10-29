@@ -34,3 +34,5 @@ sqlmodel==0.0.22
 urllib3==1.26.16
 validators==0.20.0
 watchdog==3.0.0
+bcrypt==4.2.0
+Flask-JWT-Extended==4.6.0
