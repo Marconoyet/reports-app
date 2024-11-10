@@ -5,17 +5,22 @@ from .custom_exceptions import DatabaseError
 from models.folder_model import Folder
 from db.db_utils import execute_query
 from models.template_model import Template
+from models.centers_model import Center
 from db import db
 
 
-def create_folder_db(folder_data):
-    """Insert a new folder into the MySQL database using SQLAlchemy."""
+def create_folder_db(folder_data, center_id, role):
+    """Insert a new folder into the MySQL database using SQLAlchemy with user role check."""
     try:
-        print(folder_data)
+        # Assign center_id only if role is not 'SuperAdmin' or if provided center_id is None
+        if role != 'SuperAdmin' or not center_id:
+            folder_data['center_id'] = center_id  # Automatically assign center_id for non-SuperAdmin
+
         new_folder_id = execute_query('insert', model=Folder, data=folder_data)
         return new_folder_id
     except SQLAlchemyError as e:
         raise DatabaseError(f"An unexpected error occurred: {e}")
+
 
 
 def get_folder_db(folder_id):
@@ -118,29 +123,48 @@ def add_file_to_folder_db(folder_id, file_metadata):
     except Exception as e:
         raise DatabaseError(f"An unexpected error occurred: {e}")
 
-
-def list_folders_db():
-    """Retrieve a list of all folders with the number of templates in each folder."""
+def list_folders_db(role, center_id=None):
+    """Retrieve a list of folders based on the user's role, including center details."""
     try:
-        # Perform a query that joins Folder and Template and counts the number of templates per folder
-        folders_with_template_count = db.session.query(
+        query = db.session.query(
             Folder.id,
             Folder.folder_name,
             Folder.created_time,
-            func.count(Template.id).label('template_count')
-        ).outerjoin(Template, Folder.id == Template.folder_id).group_by(Folder.id).all()
+            Folder.center_id,
+            func.count(Template.id).label('template_count'),
+            Center.name.label('center_name'),  # Fetch center name
+            Center.color.label('center_color')  # Fetch center color
+        ).outerjoin(Template, Folder.id == Template.folder_id
+        ).outerjoin(Center, Folder.center_id == Center.id)  # Join with Center table
 
-        folder_list = []
-        for folder in folders_with_template_count:
-            folder_data = {
+        if role == "Admin":
+            if center_id is not None:
+                query = query.filter(Folder.center_id == center_id)
+            else:
+                raise Exception("Center ID is required for Admins.")    
+        elif role == "Member":
+            if center_id is not None:
+                query = query.filter(Folder.center_id == center_id)
+            else:
+                raise Exception("Center ID is required for Members.")
+                
+        folders_with_template_count = query.group_by(Folder.id).all()
+        
+        folder_list = [
+            {
                 'id': folder.id,
                 'folder_name': folder.folder_name,
                 'created_time': folder.created_time,
-                'template_count': folder.template_count  # Count of templates in this folder
+                'center_id': folder.center_id,
+                'template_count': folder.template_count,
+                'center_name': folder.center_name,  # Include center name
+                'center_color': folder.center_color  # Include center color
             }
-            folder_list.append(folder_data)
+            for folder in folders_with_template_count
+        ]
 
         return folder_list
 
     except SQLAlchemyError as e:
         raise Exception(f"Failed to list folders: {e}")
+

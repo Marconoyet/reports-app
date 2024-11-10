@@ -9,10 +9,10 @@ from db.reports import get_folder_templates
 from db.custom_exceptions import DatabaseError
 
 
-def create_folder(data):
+def create_folder(data,center_id, role):
     """Business logic for creating a folder."""
     try:
-        return create_folder_db(data)
+        return create_folder_db(data, center_id, role)
     except DatabaseError as e:
         raise Exception(f"Service Error - Could not create folder: {e}")
 
@@ -56,9 +56,9 @@ def delete_folder(folder_id):
         raise Exception(f"Service Error - Could not delete folder: {e}")
 
 
-def list_folders():
-    """Business logic for listing all folders."""
+def list_folders(role, center_id=None):
+    """Business logic for listing all folders based on user role."""
     try:
-        return list_folders_db()
+        return list_folders_db(role, center_id)
     except DatabaseError as e:
         raise Exception(f"Service Error - Could not list folders: {e}")

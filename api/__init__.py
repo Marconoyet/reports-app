@@ -4,6 +4,7 @@ from .users import users_bp
 from .files import files_bp
 from .folders import folders_bp
 from .auth import auth_bp
+from .centers import centers_bp
 from flask import Blueprint
 
 # Initialize the API blueprint
@@ -16,5 +17,6 @@ api_bp.register_blueprint(folders_bp, url_prefix='/folders')
 api_bp.register_blueprint(files_bp, url_prefix='/files')
 api_bp.register_blueprint(users_bp, url_prefix='/users')
 api_bp.register_blueprint(reports_bp, url_prefix='/reports')
+api_bp.register_blueprint(centers_bp, url_prefix='/centers')
 api_bp.register_blueprint(recent_open_bp, url_prefix='/recent_open')
 api_bp.register_blueprint(auth_bp, url_prefix='/auth')

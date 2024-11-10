@@ -6,15 +6,24 @@ from services.folders_service import (
     delete_folder,
     list_folders
 )
-
+from services.users_service import get_user_role
+from flask_jwt_extended import (
+    jwt_required,
+    get_jwt_identity,
+)
 folders_bp = Blueprint('folders', __name__)
 
 
 @folders_bp.route('/create', methods=['POST'])
+@jwt_required()  # Assuming JWT for authentication
 def create_new_folder():
     try:
         data = request.json
-        folder_id = create_folder(data)
+        current_user_id = get_jwt_identity()
+        user = get_user_role(current_user_id)  # Assume this fetches the user details including role and center_id
+        role = user.get('role')
+        center_id = user.get('center_id') if role != 'SuperAdmin' else None  # Center ID filtering for non-SuperAdmins
+        folder_id = create_folder(data, center_id, role)
         return jsonify({"status": "success", "folder_id": folder_id}), 201
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -51,9 +60,14 @@ def delete_folder_data(folder_id):
 
 
 @folders_bp.route('/list', methods=['GET'])
+@jwt_required()  # Assuming JWT for authentication
 def list_folders_data():
     try:
-        folders = list_folders()
+        current_user_id = get_jwt_identity()
+        user = get_user_role(current_user_id)  # Assume this fetches the user details including role and center_id
+        role = user.get('role')
+        center_id = user.get('center_id') if role != 'SuperAdmin' else None  # Center ID filtering for non-SuperAdmins
+        folders = list_folders(role, center_id)
         return jsonify({"status": "success", "data": folders}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

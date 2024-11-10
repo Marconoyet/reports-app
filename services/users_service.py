@@ -6,15 +6,15 @@ from db.users import (
     list_users_db,
     check_email_db,
     check_username_db,
-    check_user_credentials
+    check_user_credentials, get_user_db_basic
 )
 from db.custom_exceptions import DatabaseError
 
 
-def create_user(data):
+def create_user(data, center_id):
     """Business logic for creating a user."""
     try:
-        return create_user_db(data)
+        return create_user_db(data, center_id)
     except DatabaseError as e:
         raise Exception(f"Service Error - Could not create user: {e}")
 
@@ -25,6 +25,14 @@ def get_user(user_id):
         return get_user_db(user_id)
     except DatabaseError as e:
         raise Exception(f"Service Error - Could not retrieve user: {e}")
+    
+def get_user_role(user_id):
+    """Business logic for retrieving a user."""
+    try:
+        return get_user_db_basic(user_id)
+    except DatabaseError as e:
+        raise Exception(f"Service Error - Could not retrieve user: {e}")
+
 
 
 def update_user(user_id, data):
@@ -43,10 +51,10 @@ def delete_user(user_id):
         raise Exception(f"Service Error - Could not delete user: {e}")
 
 
-def list_users():
+def list_users(center_id):
     """Business logic for listing all users."""
     try:
-        return list_users_db()
+        return list_users_db(center_id)
     except DatabaseError as e:
         raise Exception(f"Service Error - Could not list users: {e}")
 

@@ -14,6 +14,7 @@ def create_new_report():
         file = request.files.get('file')  # Get the file from the request
         userId = request.form.get('userId')
         folderId = request.form.get('folderId')
+        centerId = request.form.get('centerId')
         # Prepare the data to pass to the service layer
         data = {
             "reportName": report_name,
@@ -21,7 +22,8 @@ def create_new_report():
             "folderId": folder_id,
             "file": file,
             "userId": userId,
-            "folderId": folderId
+            "folderId": folderId,
+            "centerId": centerId
         }
 
         # Call the service layer to handle business logic

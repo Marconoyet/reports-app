@@ -1,15 +1,23 @@
 from flask import Blueprint, request, jsonify
-from services.users_service import create_user, get_user, update_user, delete_user, list_users, check_users_email, check_users_username,check_users_login
-
+from services.users_service import create_user, get_user, update_user, delete_user, list_users, check_users_email, check_users_username,check_users_login, get_user_role
+from flask_jwt_extended import (
+    jwt_required,
+    get_jwt_identity,
+)
 users_bp = Blueprint('users', __name__)
 
 
 @users_bp.route('/create', methods=['POST'])
+@jwt_required()
 def create_new_user():
     try:
         data = request.json
-        user_id = create_user(data)
-        return jsonify({"status": "success", "user_id": user_id}), 201
+        current_user_id = get_jwt_identity()
+        user = get_user_role(current_user_id)  # Assume this fetches the user details including role and center_id
+        role = user.get('role')
+        center_id = user.get('center_id') if role != 'SuperAdmin' else data.get("center")  
+        user = create_user(data, center_id)
+        return jsonify({"status": "success", "user": user}), 201
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -45,9 +53,14 @@ def delete_user_data(user_id):
 
 
 @users_bp.route('/list', methods=['GET'])
+@jwt_required()
 def list_users_data():
     try:
-        users = list_users()
+        current_user_id = get_jwt_identity()
+        user = get_user_role(current_user_id)  # Assume this fetches the user details including role and center_id
+        role = user.get('role')
+        center_id = user.get('center_id') if role != 'SuperAdmin' else None  
+        users = list_users(center_id)
         return jsonify({"status": "success", "data": users}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

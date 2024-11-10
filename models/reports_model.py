@@ -3,6 +3,7 @@ from db import db
 from datetime import datetime
 from models.users_model import User
 from models.template_model import Template
+from models.centers_model import Center
 import base64
 class Report(db.Model):
     __tablename__ = 'reports'
@@ -13,6 +14,7 @@ class Report(db.Model):
     user_id = Column(BigInteger, ForeignKey(User.id), nullable=False)  # Foreign key referencing users table
     template_id = Column(BigInteger, ForeignKey(Template.id), nullable=False)  # Foreign key referencing templates table
     created_time = Column(DateTime, default=datetime.utcnow)  # Timestamp for when the report was created
+    center_id = db.Column(db.Integer, db.ForeignKey(Center.id))
     user = db.relationship("User")
     def __repr__(self):
         return f"<Report(id={self.id}, report_name={self.report_name}, created_time={self.created_time})>"
@@ -22,6 +24,7 @@ class Report(db.Model):
         return {
             "id": self.id,
             "report_name": self.report_name,
+            "center_id": self.center_id,
             "user": {
                 "name": f"{self.user.first_name or ''} {self.user.last_name or ''}".strip(),  # Handles None and removes extra spaces
                 "email": self.user.email or ''  # Provide an empty string if email is None

@@ -32,7 +32,6 @@ def allowed_file(filename):
 def add_report(report_data):
     """Business logic for adding a report and saving the first image from the first slide in the template."""
     try:
-        print(report_data)
         file = report_data.get('file')
 
         print("File saved as report.pptx")
@@ -52,6 +51,7 @@ def add_report(report_data):
                 "template_image": image_bytes,
                 "user_id": int(report_data.get('userId')),
                 "folder_id": int(report_data.get('folderId')),
+                "center_id": int(report_data.get('centerId')),
                 "template_file": file_stream,
                 "created_time": datetime.now()
             }
@@ -179,9 +179,8 @@ def prepareReportForUpload(report, report_name):
             "report_name": report_name,  # Report name
             "template_id": report_data.get("id"),  # Template ID (foreign key)
             "report_file": file_binary_data,                            # Binary file data
-            # Optional image binary data (if applicable)
             "report_image": image_bytes,
-            # User ID (foreign key)
+            "center_id": report_data.get("center_id"),
             "user_id": report_data.get("user_id"),
             "created_time": datetime.now()                  # Current timestamp
         }

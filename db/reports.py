@@ -119,7 +119,7 @@ def get_file_of_report(report_id):
         if not report.template_file:
             raise DatabaseError(
                 f"Report with ID {report_id} has no file associated with it")
-
+        
         return report  # Return the binary data of the PPTX file
 
     except SQLAlchemyError as e:
