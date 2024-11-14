@@ -3,7 +3,8 @@ from db.centers import (
     get_center_db,
     update_center_db,
     delete_center_db,
-    list_centers_db
+    list_centers_db,
+    get_center_admin_db
 )
 
 from db.custom_exceptions import DatabaseError
@@ -42,6 +43,12 @@ def list_centers():
         return list_centers_db()
     except DatabaseError as e:
         raise Exception(f"Service Error - Could not list centers: {e}")
+    
+def get_center_admin(center_id):
+    try:
+        return get_center_admin_db(center_id)
+    except DatabaseError as e:
+        raise Exception(f"Service Error - Could not get admin centers: {e}")    
 
 def fetch_user_and_center(user_id):
     from services.users_service import get_user

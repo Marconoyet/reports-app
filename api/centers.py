@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from services.centers_service import (
-    create_center, get_center, update_center, delete_center, list_centers
+    create_center, get_center, update_center, delete_center, list_centers, get_center_admin
 )
 
 centers_bp = Blueprint('centers', __name__)
@@ -51,5 +51,13 @@ def list_centers_data():
     try:
         centers = list_centers()
         return jsonify({"status": "success", "data": centers}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@centers_bp.route('/<center_id>/admin', methods=['GET'])
+def get_center_super_admin(center_id):
+    try:
+        user = get_center_admin(center_id)
+        return jsonify({"status": "success", "user": user}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

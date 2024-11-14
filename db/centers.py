@@ -158,3 +158,30 @@ def list_centers_db():
         raise DatabaseError(f"Failed to retrieve centers: {e}")
 
 
+def get_center_admin_db(center_id):
+    """Retrieve Super Admin, if not available retrieve an Admin for the specified center with deferred image loading."""
+    try:
+        # Query for a SuperAdmin first
+        super_admin = db.session.query(User).options(
+            db.defer(User.image)  # Defer loading of the image field
+        ).filter_by(
+            center_id=center_id, role='SuperAdmin'
+        ).first()
+
+        if super_admin:
+            return super_admin.to_dict()  # Format the user data
+
+        # If no SuperAdmin found, fallback to Admin
+        admin = db.session.query(User).options(
+            db.defer(User.image)  # Defer loading of the image field
+        ).filter_by(
+            center_id=center_id, role='Admin'
+        ).first()
+
+        if admin:
+            return admin.to_dict()
+
+        return None  # No SuperAdmin or Admin found
+
+    except SQLAlchemyError as e:
+        raise Exception(f"Failed to retrieve center admin: {e}")
