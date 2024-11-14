@@ -56,19 +56,22 @@ def update_center_db(center_id, updated_data):
                 updated_data['logo'].split(',')[1]
             )
 
-        # Update the Center data
+        # Update the Center data, ensuring there is data to update
         center_update_data = {key: updated_data[key]
                               for key in updated_data if key != 'users'}
-        result = execute_query(
-            action='update',
-            model=Center,
-            data=center_update_data,
-            filters={'id': center_id}
-        )
+        if center_update_data:  # Only update if there is data to update
+            result = execute_query(
+                action='update',
+                model=Center,
+                data=center_update_data,
+                filters={'id': center_id}
+            )
 
-        if result == "No records found to update":
-            raise DatabaseError(
-                f"Center with ID {center_id} not found for update")
+            if result == "No records found to update":
+                raise DatabaseError(
+                    f"Center with ID {center_id} not found for update")
+        else:
+            result = "No center data to update."
 
         # Update the center_id of users in the 'users' field
         if 'users' in updated_data:
@@ -133,8 +136,10 @@ def list_centers_db():
         centers = (
             db.session.query(
                 Center,
-                func.coalesce(user_count_subquery.c.user_count, 0).label("user_count"),
-                func.coalesce(template_count_subquery.c.template_count, 0).label("template_count"),
+                func.coalesce(user_count_subquery.c.user_count,
+                              0).label("user_count"),
+                func.coalesce(template_count_subquery.c.template_count, 0).label(
+                    "template_count"),
                 user_count_subquery.c.user_ids
             )
             .outerjoin(user_count_subquery, Center.id == user_count_subquery.c.center_id)
