@@ -125,6 +125,9 @@ def generate_pptx_report(replacements, report_id, report_name):
         temp_pptx_file.write(pptx_stream.getvalue())
         temp_pptx_path = temp_pptx_file.name
 
+    pdf_stream = None
+    pdf_error = None  # To store error messages
+
     # Convert the PPTX to PDF
     with tempfile.TemporaryDirectory() as temp_output_dir:
         try:
@@ -141,11 +144,9 @@ def generate_pptx_report(replacements, report_id, report_name):
                 pdf_stream.write(pdf_file.read())
             pdf_stream.seek(0)
         except subprocess.CalledProcessError as e:
-            print(f"Error during conversion: {e}")
-            pdf_stream = None
+            pdf_error = f"Error during conversion: {e}"
         except FileNotFoundError:
-            print("LibreOffice is not installed or not found in PATH.")
-            pdf_stream = None
+            pdf_error = "LibreOffice is not installed or not found in PATH."
         finally:
             # Cleanup temporary PPTX file
             os.remove(temp_pptx_path)
@@ -155,8 +156,8 @@ def generate_pptx_report(replacements, report_id, report_name):
     threading.Thread(target=upload_pptx_in_background,
                      args=(pptx_stream, report, app, report_name)).start()
 
-    # Return both PPTX and PDF streams
-    return pptx_stream, pdf_stream
+    # Return both PPTX and PDF streams, and the error if present
+    return pptx_stream, pdf_stream, pdf_error
 
 
 # def generate_pptx_report(replacements, report_id, report_name):

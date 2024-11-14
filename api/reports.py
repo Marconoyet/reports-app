@@ -85,9 +85,12 @@ def generate_report_api():
         filetype = data.get('filetype')
 
         if filetype.endswith('pptx'):
-            pptx_stream, pdf_stream = generate_pptx_report(
+            pptx_stream, pdf_stream, pdf_error = generate_pptx_report(
                 data['replacements'], report_id, report_name
             )
+
+            if pdf_error:
+                return jsonify({"status": "error", "message": pdf_error}), 500
 
             zip_stream = BytesIO()
             with zipfile.ZipFile(zip_stream, 'w') as zip_file:
