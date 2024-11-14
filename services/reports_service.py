@@ -99,6 +99,14 @@ def update_report(report_id, updated_data):
 
 
 def generate_pptx_report(replacements, report_id, report_name):
+    import os
+    import subprocess
+    import tempfile
+    import threading
+    from io import BytesIO
+    from pptx import Presentation
+    from flask import current_app
+
     # Generate PPTX report
     report = get_file_of_report(report_id)
     file_data = report.template_file
@@ -131,8 +139,10 @@ def generate_pptx_report(replacements, report_id, report_name):
     # Convert the PPTX to PDF
     with tempfile.TemporaryDirectory() as temp_output_dir:
         try:
+            # Use the full path to `libreoffice`
+            libreoffice_path = '/usr/bin/libreoffice'  # Update this path if necessary
             command = [
-                'libreoffice', '--headless', '--convert-to', 'pdf', temp_pptx_path, '--outdir', temp_output_dir
+                libreoffice_path, '--headless', '--convert-to', 'pdf', temp_pptx_path, '--outdir', temp_output_dir
             ]
             subprocess.run(command, check=True)
             pdf_path = os.path.join(temp_output_dir, os.path.splitext(
@@ -145,11 +155,14 @@ def generate_pptx_report(replacements, report_id, report_name):
             pdf_stream.seek(0)
         except subprocess.CalledProcessError as e:
             pdf_error = f"Error during conversion: {e}"
-        except FileNotFoundError:
-            pdf_error = "LibreOffice is not installed or not found in PATH."
+        except FileNotFoundError as e:
+            pdf_error = f"File not found error: {e}"
         finally:
             # Cleanup temporary PPTX file
-            os.remove(temp_pptx_path)
+            try:
+                os.remove(temp_pptx_path)
+            except OSError as cleanup_error:
+                pdf_error = f"Error cleaning up temporary file: {cleanup_error}"
 
     # Start a background thread to handle the PPTX file upload process
     app = current_app._get_current_object()
