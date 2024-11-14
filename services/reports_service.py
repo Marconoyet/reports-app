@@ -21,6 +21,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from services.services_utiliy import extract_first_image_from_slide
 from datetime import datetime
 import threading
+import subprocess
+import tempfile
+import os
 from flask import current_app
 
 
@@ -96,6 +99,7 @@ def update_report(report_id, updated_data):
 
 
 def generate_pptx_report(replacements, report_id, report_name):
+    # Generate PPTX report
     report = get_file_of_report(report_id)
     file_data = report.template_file
     presentation = Presentation(BytesIO(file_data))
@@ -112,17 +116,76 @@ def generate_pptx_report(replacements, report_id, report_name):
                             run.text = run.text.replace(key, value)
 
     # Save the modified presentation to a BytesIO stream
-    output_stream = BytesIO()
-    presentation.save(output_stream)
-    output_stream.seek(0)
+    pptx_stream = BytesIO()
+    presentation.save(pptx_stream)
+    pptx_stream.seek(0)
 
-    # Start a background thread to handle the file upload process
+    # Save the PPTX stream to a temporary file for PDF conversion
+    with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as temp_pptx_file:
+        temp_pptx_file.write(pptx_stream.getvalue())
+        temp_pptx_path = temp_pptx_file.name
+
+    # Convert the PPTX to PDF
+    with tempfile.TemporaryDirectory() as temp_output_dir:
+        try:
+            command = [
+                'libreoffice', '--headless', '--convert-to', 'pdf', temp_pptx_path, '--outdir', temp_output_dir
+            ]
+            subprocess.run(command, check=True)
+            pdf_path = os.path.join(temp_output_dir, os.path.splitext(
+                os.path.basename(temp_pptx_path))[0] + ".pdf")
+
+            # Read the generated PDF into a BytesIO stream
+            pdf_stream = BytesIO()
+            with open(pdf_path, 'rb') as pdf_file:
+                pdf_stream.write(pdf_file.read())
+            pdf_stream.seek(0)
+        except subprocess.CalledProcessError as e:
+            print(f"Error during conversion: {e}")
+            pdf_stream = None
+        except FileNotFoundError:
+            print("LibreOffice is not installed or not found in PATH.")
+            pdf_stream = None
+        finally:
+            # Cleanup temporary PPTX file
+            os.remove(temp_pptx_path)
+
+    # Start a background thread to handle the PPTX file upload process
     app = current_app._get_current_object()
     threading.Thread(target=upload_pptx_in_background,
-                     args=(output_stream, report, app, report_name)).start()
+                     args=(pptx_stream, report, app, report_name)).start()
 
-    # Return the stream to the client
-    return output_stream
+    # Return both PPTX and PDF streams
+    return pptx_stream, pdf_stream
+
+
+# def generate_pptx_report(replacements, report_id, report_name):
+#     report = get_file_of_report(report_id)
+#     file_data = report.template_file
+#     presentation = Presentation(BytesIO(file_data))
+
+#     # Replace the fields in the PPTX
+#     for slide in presentation.slides:
+#         for shape in slide.shapes:
+#             if not hasattr(shape, "text_frame"):
+#                 continue
+#             for paragraph in shape.text_frame.paragraphs:
+#                 for run in paragraph.runs:
+#                     for key, value in replacements.items():
+#                         if key in run.text:
+#                             run.text = run.text.replace(key, value)
+
+#     # Save the modified presentation to a BytesIO stream
+#     output_stream = BytesIO()
+#     presentation.save(output_stream)
+#     output_stream.seek(0)
+#     # Start a background thread to handle the file upload process
+#     app = current_app._get_current_object()
+#     threading.Thread(target=upload_pptx_in_background,
+#                      args=(output_stream, report, app, report_name)).start()
+
+#     # Return the stream to the client
+#     return output_stream
 
 
 def upload_pptx_in_background(output_stream, report, app, report_name):

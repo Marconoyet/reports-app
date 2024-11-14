@@ -53,7 +53,6 @@ def login():
             max_age=60 * 60 * 24 * 365 * 10  # 10 years in seconds
         )
 
-
         # Set CSRF tokens in separate cookies with the same expiration as their corresponding token
         # response.set_cookie(
         #     'csrf_access_token', csrf_access_token,
@@ -93,7 +92,6 @@ def validate():
     current_user_id = get_jwt_identity()
     if not current_user_id:
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
-
     # Fetch user and center data using the helper function
     user, center, error = fetch_user_and_center(current_user_id)
     if error:
@@ -108,16 +106,20 @@ def validate():
     else:
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
 
+
 @auth_bp.route('/logout', methods=['POST'])
 def logout():
     response = make_response(jsonify({"message": "Logout successful"}))
-    
+
     unset_jwt_cookies(response)
 
-    response.set_cookie('access_token_cookie', '', expires=0, httponly=True, samesite='None', secure=True)
-    response.set_cookie('refresh_token_cookie', '', expires=0, httponly=True, samesite='None', secure=True)
-    response.set_cookie('user_id', '', expires=0, httponly=True, samesite='None', secure=True)
-    response.set_cookie('center_id', '', expires=0, httponly=True, samesite='None', secure=True)
-
+    response.set_cookie('access_token_cookie', '', expires=0,
+                        httponly=True, samesite='None', secure=True)
+    response.set_cookie('refresh_token_cookie', '', expires=0,
+                        httponly=True, samesite='None', secure=True)
+    response.set_cookie('user_id', '', expires=0,
+                        httponly=True, samesite='None', secure=True)
+    response.set_cookie('center_id', '', expires=0,
+                        httponly=True, samesite='None', secure=True)
 
     return response

@@ -1,4 +1,6 @@
+from io import BytesIO
 from flask import Blueprint, request, jsonify, send_file
+import zipfile
 from services.reports_service import add_report, get_report, delete_report, update_report
 from services.reports_service import generate_pptx_report, get_report_and_extract_fields
 reports_bp = Blueprint('reports', __name__)
@@ -81,11 +83,27 @@ def generate_report_api():
         report_id = data.get('report_id')
         report_name = data.get('report_name')
         filetype = data.get('filetype')
-        # Check file extension and handle accordingly
+
         if filetype.endswith('pptx'):
-            pptx_data = generate_pptx_report(
-                data['replacements'], report_id, report_name)
-            return send_file(pptx_data, as_attachment=True, download_name="modified_presentation.pptx")
+            pptx_stream, pdf_stream = generate_pptx_report(
+                data['replacements'], report_id, report_name
+            )
+
+            zip_stream = BytesIO()
+            with zipfile.ZipFile(zip_stream, 'w') as zip_file:
+                zip_file.writestr("modified_presentation.pptx",
+                                  pptx_stream.getvalue())
+                if pdf_stream:
+                    zip_file.writestr(
+                        "converted_presentation.pdf", pdf_stream.getvalue())
+            zip_stream.seek(0)
+
+            return send_file(
+                zip_stream,
+                as_attachment=True,
+                download_name="report_files.zip",
+                mimetype='application/zip'
+            )
         else:
             return jsonify({"status": "error", "message": "Unsupported file type"}), 400
     except Exception as e:
