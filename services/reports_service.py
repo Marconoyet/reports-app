@@ -99,13 +99,6 @@ def update_report(report_id, updated_data):
 
 
 def generate_pptx_report(replacements, report_id, report_name):
-    import os
-    import subprocess
-    import tempfile
-    import threading
-    from io import BytesIO
-    from pptx import Presentation
-    from flask import current_app
 
     # Generate PPTX report
     report = get_file_of_report(report_id)
@@ -139,12 +132,13 @@ def generate_pptx_report(replacements, report_id, report_name):
     # Convert the PPTX to PDF
     with tempfile.TemporaryDirectory() as temp_output_dir:
         try:
-            # Use the full path to `libreoffice`
+            env = os.environ.copy()
+            env["PATH"] += os.pathsep + "/usr/bin"
             libreoffice_path = '/usr/bin/libreoffice'  # Update this path if necessary
             command = [
                 libreoffice_path, '--headless', '--convert-to', 'pdf', temp_pptx_path, '--outdir', temp_output_dir
             ]
-            subprocess.run(command, check=True)
+            subprocess.run(command, check=True, env=env)
             pdf_path = os.path.join(temp_output_dir, os.path.splitext(
                 os.path.basename(temp_pptx_path))[0] + ".pdf")
 
