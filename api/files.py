@@ -4,7 +4,7 @@ from flask_jwt_extended import (
 )
 from services.users_service import get_user_role
 from flask import Blueprint, request, jsonify, send_file
-from services.files_service import get_file_service, move_file, delete_file, get_files, get_file_pdf_service
+from services.files_service import get_file_service, move_file, delete_file, get_files, get_file_pdf_service, modify_pdf_metadata
 files_bp = Blueprint('files', __name__)
 
 
@@ -32,13 +32,15 @@ def get_file_pdf(report_id):
         result = get_file_pdf_service(report_id)
         if "error" in result:
             return jsonify({"status": "error", "message": result["error"]}), 500
-        response = send_file(result["pdf_stream"], mimetype='application/pdf',
-                             as_attachment=True, download_name=f'{result["report_name"]}.pdf')
-        # Set content-disposition header with filename manually if not set
-        response.headers["Content-Disposition"] = f'attachment; filename="{result["report_name"]}.pdf"'
-        # Expose headers for CORS if necessary
-        response.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
-        return response
+        afterEditStream = modify_pdf_metadata(
+            result["pdf_stream"], result["report_name"])
+        return send_file(afterEditStream, mimetype='application/pdf',
+                         as_attachment=True, download_name=f'{result["report_name"]}.pdf')
+        # # Set content-disposition header with filename manually if not set
+        # response.headers["Content-Disposition"] = f'attachment; filename="{result["report_name"]}.pdf"'
+        # # Expose headers for CORS if necessary
+        # response.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
+        # return response
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 

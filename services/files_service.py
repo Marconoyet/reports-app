@@ -10,7 +10,7 @@ from db.files import (
     get_latest_reports
 )
 from db.custom_exceptions import DatabaseError
-
+import fitz  # PyMuPDF
 from io import BytesIO
 # import pythoncom
 import tempfile
@@ -108,3 +108,13 @@ def get_files(limit, page, center_id):
         return get_latest_reports(limit, page, center_id)
     except DatabaseError as e:
         raise Exception(f"Service Error - Could not delete file: {e}")
+
+
+def modify_pdf_metadata(pdf_stream, new_title):
+    pdf_document = fitz.open("pdf", pdf_stream)
+    pdf_document.set_metadata({"title": new_title})
+    pdf_stream = BytesIO()
+    pdf_document.save(pdf_stream)
+    pdf_document.close()
+    pdf_stream.seek(0)
+    return pdf_stream
