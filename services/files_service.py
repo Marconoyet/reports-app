@@ -73,7 +73,7 @@ def get_file_pdf_service(report_id):
                     return {"error": f"Error cleaning up temporary file: {cleanup_error}"}
 
         # Step 6: Return the generated PDF stream if no error
-        return {"pdf_stream": pdf_stream}
+        return {"pdf_stream": pdf_stream, "report_name": report.report_name}
     except Exception as e:
         return {"error": f"Error converting PPTX to PDF: {e}"}
 

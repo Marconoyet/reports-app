@@ -29,11 +29,10 @@ def get_file(report_id):
 @files_bp.route('/pdf/<int:report_id>', methods=['GET'])
 def get_file_pdf(report_id):
     try:
-
         result = get_file_pdf_service(report_id)
         if "error" in result:
             return jsonify({"status": "error", "message": result["error"]}), 500
-        return send_file(result["pdf_stream"], mimetype='application/pdf', as_attachment=True, download_name=f"{report_id}.pdf")
+        return send_file(result["pdf_stream"], mimetype='application/pdf', as_attachment=True, download_name=f"{result["report_name"]}.pdf")
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
