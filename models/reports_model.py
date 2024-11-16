@@ -5,17 +5,25 @@ from models.users_model import User
 from models.template_model import Template
 from models.centers_model import Center
 import base64
+
+
 class Report(db.Model):
     __tablename__ = 'reports'
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     report_name = Column(String(255), nullable=False)  # Name of the report
-    report_file = Column(LargeBinary, nullable=True)  # BLOB to store the report file
-    report_image = Column(LargeBinary, nullable=True)  # BLOB to store report image
-    user_id = Column(BigInteger, ForeignKey(User.id), nullable=False)  # Foreign key referencing users table
-    template_id = Column(BigInteger, ForeignKey(Template.id), nullable=False)  # Foreign key referencing templates table
-    created_time = Column(DateTime, default=datetime.utcnow)  # Timestamp for when the report was created
+    # BLOB to store the report file
+    report_file = Column(LargeBinary, nullable=True)
+    # BLOB to store report image
+    report_image = Column(LargeBinary, nullable=True)
+    # Foreign key referencing users table
+    user_id = Column(BigInteger, ForeignKey(User.id), nullable=False)
+    # Foreign key referencing templates table
+    template_id = Column(BigInteger, ForeignKey(Template.id), nullable=False)
+    # Timestamp for when the report was created
+    created_time = Column(DateTime, default=datetime.utcnow)
     center_id = db.Column(db.Integer, db.ForeignKey(Center.id))
     user = db.relationship("User")
+
     def __repr__(self):
         return f"<Report(id={self.id}, report_name={self.report_name}, created_time={self.created_time})>"
 
@@ -26,10 +34,16 @@ class Report(db.Model):
             "report_name": self.report_name,
             "center_id": self.center_id,
             "user": {
-                "name": f"{self.user.first_name or ''} {self.user.last_name or ''}".strip(),  # Handles None and removes extra spaces
-                "email": self.user.email or ''  # Provide an empty string if email is None
+                # Handles None and removes extra spaces
+                "name": f"{self.user.first_name or ''} {self.user.last_name or ''}".strip(),
+                "email": self.user.email or '',
+                "image": (
+                    f"data:image/png;base64,{base64.b64encode(self.user.image).decode('utf-8')}"
+                    if self.user and self.user.image else None
+                ),
             },
-            "report_image": f"data:image/png;base64,{base64.b64encode(self.report_image).decode('utf-8')}" if self.report_image else None,  # Encode image as Base64
+            # Encode image as Base64
+            "report_image": f"data:image/png;base64,{base64.b64encode(self.report_image).decode('utf-8')}" if self.report_image else None,
             "createdTime": {
                 "date": self.created_time.strftime('%Y-%m-%d'),
                 "time": self.created_time.strftime('%H:%M:%S')

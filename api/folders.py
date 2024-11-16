@@ -20,9 +20,11 @@ def create_new_folder():
     try:
         data = request.json
         current_user_id = get_jwt_identity()
-        user = get_user_role(current_user_id)  # Assume this fetches the user details including role and center_id
+        # Assume this fetches the user details including role and center_id
+        user = get_user_role(current_user_id)
         role = user.get('role')
-        center_id = user.get('center_id') if role != 'SuperAdmin' else None  # Center ID filtering for non-SuperAdmins
+        # Center ID filtering for non-SuperAdmins
+        center_id = user.get('center_id') if role != 'SuperAdmin' else None
         folder_id = create_folder(data, center_id, role)
         return jsonify({"status": "success", "folder_id": folder_id}), 201
     except Exception as e:
@@ -60,13 +62,14 @@ def delete_folder_data(folder_id):
 
 
 @folders_bp.route('/list', methods=['GET'])
-@jwt_required()  # Assuming JWT for authentication
+@jwt_required()
 def list_folders_data():
     try:
         current_user_id = get_jwt_identity()
-        user = get_user_role(current_user_id)  # Assume this fetches the user details including role and center_id
+        user = get_user_role(current_user_id)
         role = user.get('role')
-        center_id = user.get('center_id') if role != 'SuperAdmin' else None  # Center ID filtering for non-SuperAdmins
+        # Center ID filtering for non-SuperAdmins
+        center_id = user.get('center_id') if role != 'SuperAdmin' else None
         folders = list_folders(role, center_id)
         return jsonify({"status": "success", "data": folders}), 200
     except Exception as e:

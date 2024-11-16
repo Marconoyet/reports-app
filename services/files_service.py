@@ -1,5 +1,7 @@
 # import comtypes.client
 import os
+import subprocess
+import tempfile
 from db.files import (
     get_file_db,
     upload_file_db,
@@ -27,46 +29,53 @@ def get_file_service(report_Id):
         raise Exception(f"Service Error - Could not upload file: {e}")
 
 
-# def convert_pptx_to_pdf(pptx_binary_data):
-#     """Convert PPTX binary data to PDF using comtypes and return as BytesIO."""
-#     # Initialize the COM library
-#     pythoncom.CoInitialize()
+def get_file_pdf_service(report_id):
+    try:
+        # Step 1: Retrieve the PPTX data from the database
+        report = get_file_db(report_id)
+        if not report or not report.report_file:
+            return {"error": "Report not found or no template file"}
 
-#     # Create a temporary file to hold the pptx binary data
-#     with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as temp_pptx_file:
-#         temp_pptx_file.write(pptx_binary_data)
-#         temp_pptx_path = temp_pptx_file.name  # Get the file path
+        pptx_stream = BytesIO(report.report_file)
 
-#     # Create a temporary file for the output PDF
-#     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf_file:
-#         temp_pdf_path = temp_pdf_file.name
+        # Step 2: Save the PPTX to a temporary file
+        with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as temp_pptx_file:
+            temp_pptx_file.write(pptx_stream.getvalue())
+            temp_pptx_path = temp_pptx_file.name
 
-#     try:
-#         # Start PowerPoint application
-#         powerpoint = comtypes.client.CreateObject("Powerpoint.Application")
-#         powerpoint.Visible = 1
+        pdf_stream = None
 
-#         # Open the temporary PPTX file
-#         presentation = powerpoint.Presentations.Open(temp_pptx_path)
+        # Step 3: Convert the PPTX to PDF using LibreOffice
+        with tempfile.TemporaryDirectory() as temp_output_dir:
+            try:
+                env = os.environ.copy()
+                env["PATH"] += os.pathsep + "/usr/bin"
+                libreoffice_path = '/usr/bin/libreoffice'  # Adjust path if necessary
+                command = [
+                    libreoffice_path, '--headless', '--convert-to', 'pdf', temp_pptx_path, '--outdir', temp_output_dir
+                ]
+                subprocess.run(command, check=True, env=env)
+                pdf_path = os.path.join(temp_output_dir, os.path.splitext(
+                    os.path.basename(temp_pptx_path))[0] + ".pdf")
 
-#         # Save as PDF
-#         presentation.SaveAs(temp_pdf_path, 32)  # 32 is the format for PDF
+                # Step 4: Read the generated PDF into a BytesIO stream
+                pdf_stream = BytesIO()
+                with open(pdf_path, 'rb') as pdf_file:
+                    pdf_stream.write(pdf_file.read())
+                pdf_stream.seek(0)
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                return {"error": f"Error during conversion: {e}"}
+            finally:
+                # Step 5: Cleanup temporary PPTX file
+                try:
+                    os.remove(temp_pptx_path)
+                except OSError as cleanup_error:
+                    return {"error": f"Error cleaning up temporary file: {cleanup_error}"}
 
-#         # Close the presentation and quit PowerPoint
-#         presentation.Close()
-#         powerpoint.Quit()
-
-#         # Read the PDF data from the temporary file
-#         with open(temp_pdf_path, "rb") as pdf_file:
-#             pdf_data = BytesIO(pdf_file.read())
-
-#     finally:
-#         # Clean up the temporary files
-#         os.remove(temp_pptx_path)
-#         os.remove(temp_pdf_path)
-#         # Uninitialize the COM library
-#         pythoncom.CoUninitialize()
-#     return pdf_data
+        # Step 6: Return the generated PDF stream if no error
+        return {"pdf_stream": pdf_stream}
+    except Exception as e:
+        return {"error": f"Error converting PPTX to PDF: {e}"}
 
 
 def upload_file(folder_id, file_data):
@@ -93,9 +102,9 @@ def delete_file(file_id, folder_id):
         raise Exception(f"Service Error - Could not delete file: {e}")
 
 
-def get_files(limit):
+def get_files(limit, page, center_id):
     """Business logic for deleting a file from a folder."""
     try:
-        return get_latest_reports(limit)
+        return get_latest_reports(limit, page, center_id)
     except DatabaseError as e:
         raise Exception(f"Service Error - Could not delete file: {e}")

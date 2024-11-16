@@ -5,6 +5,7 @@ from db.db_utils import execute_query
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
 from models.reports_model import Report
+from models.centers_model import Center
 from .custom_exceptions import DatabaseError
 from bson.objectid import ObjectId
 from pymongo.errors import PyMongoError
@@ -74,22 +75,50 @@ def delete_file_db(file_id, folder_id):
         raise DatabaseError(f"Failed to delete file: {e}")
 
 
-def get_latest_reports(limit):
-    """Retrieve the latest reports from the database."""
+def get_latest_reports(limit, page, center_id=None):
+    """Retrieve paginated reports from the database along with their centers."""
     try:
-        # Use 'joinedload' to eagerly load the 'user' relationship
-        latest_reports = (Report.query
-                          .options(joinedload(Report.user))
-                          .options(defer(Report.report_file))
-                          .order_by(Report.created_time.desc())
-                          .limit(limit)
-                          .all())
+        # Step 1: Base query for reports with pagination and optional center filtering
+        query = Report.query.options(joinedload(
+            Report.user)).options(defer(Report.report_file))
 
-        # Convert each report to a dictionary to send it to the frontend
-        reports_list = [report.to_dict() for report in latest_reports]
+        # Apply filtering by center_id if provided
+        if center_id is not None:
+            query = query.filter(Report.center_id == center_id)
 
-        return reports_list
+        # Count total records for pagination
+        total_records = query.count()
 
+        # Apply limit and offset for pagination
+        paginated_reports = (query
+                             .order_by(Report.created_time.desc())
+                             .limit(limit)
+                             .offset((page - 1) * limit)
+                             .all())
+
+        # Step 2: Get unique center IDs from the reports
+        center_ids = {
+            report.center_id for report in paginated_reports if report.center_id}
+
+        # Step 3: Query centers once for all unique center IDs
+        centers = {}
+        if center_ids:
+            center_records = Center.query.filter(
+                Center.id.in_(center_ids)).all()
+            centers = {center.id: center.to_dict()
+                       for center in center_records}
+
+        # Step 4: Convert reports to list of dicts and attach center data
+        reports_list = [
+            {
+                **report.to_dict(),
+                # Attach center data if available
+                "center": centers.get(report.center_id)
+            }
+            for report in paginated_reports
+        ]
+
+        return reports_list, total_records
     except SQLAlchemyError as e:
         print(f"Database operation failed: {e}")
         raise Exception(f"Database operation failed: {e}")

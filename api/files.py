@@ -1,5 +1,10 @@
+from flask_jwt_extended import (
+    jwt_required,
+    get_jwt_identity,
+)
+from services.users_service import get_user_role
 from flask import Blueprint, request, jsonify, send_file
-from services.files_service import get_file_service, move_file, delete_file, get_files
+from services.files_service import get_file_service, move_file, delete_file, get_files, get_file_pdf_service
 files_bp = Blueprint('files', __name__)
 
 
@@ -18,6 +23,18 @@ def get_file(report_id):
         #     return send_file(pptx_data, as_attachment=False, download_name=f"{report_name}.pptx")
     except Exception as e:
         print(e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@files_bp.route('/pdf/<int:report_id>', methods=['GET'])
+def get_file_pdf(report_id):
+    try:
+
+        result = get_file_pdf_service(report_id)
+        if "error" in result:
+            return jsonify({"status": "error", "message": result["error"]}), 500
+        return send_file(result["pdf_stream"], mimetype='application/pdf', as_attachment=True, download_name=f"{report_id}.pdf")
+    except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
@@ -44,10 +61,21 @@ def delete_file_data(file_id):
 
 
 @files_bp.route('/get_list', methods=['GET'])
-def get_files_limit():
+@jwt_required()
+def get_files_paginated():
     try:
-        limit = request.args.get('limit', 10)
-        files = get_files(limit)
-        return jsonify({"status": "success", "message": "Files retrieved successfully", "files": files}), 200
+        current_user_id = get_jwt_identity()
+        user = get_user_role(current_user_id)
+        role = user.get('role')
+        center_id = user.get('center_id') if role != 'SuperAdmin' else None
+        limit = int(request.args.get('limit', 10))
+        page = int(request.args.get('page', 1))
+        files, total_records = get_files(limit, page, center_id)
+        return jsonify({
+            "status": "success",
+            "message": "Files retrieved successfully",
+            "files": files,
+            "total_records": total_records  # Include total records for frontend
+        }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
