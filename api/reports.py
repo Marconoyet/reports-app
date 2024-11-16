@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify, send_file
 import zipfile
 from services.reports_service import add_report, get_report, delete_report, update_report
 from services.reports_service import generate_pptx_report, get_report_and_extract_fields
+from services.files_service import modify_pdf_metadata
 reports_bp = Blueprint('reports', __name__)
 
 
@@ -88,6 +89,9 @@ def generate_report_api():
             pptx_stream, pdf_stream, pdf_error = generate_pptx_report(
                 data['replacements'], report_id, report_name
             )
+
+            pdf_stream = modify_pdf_metadata(
+                pdf_stream, report_name)
 
             if pdf_error:
                 return jsonify({"status": "error", "message": pdf_error}), 500
