@@ -13,14 +13,14 @@ def get_file(report_id):
     try:
 
         report_name, pptx_data = get_file_service(report_id)
-        return send_file(pptx_data, as_attachment=False, download_name=f"{report_name}.pptx")
-        # return_pdf = request.args.get("pdf", False, type=bool)
-        # print(return_pdf)
-        # report_name, pptx_data, pdf_file = get_file_service(report_id)
-        # if return_pdf:
-        #     return send_file(pdf_file, as_attachment=False, download_name=f"{report_name}.pdf")
-        # else:
-        #     return send_file(pptx_data, as_attachment=False, download_name=f"{report_name}.pptx")
+        response = send_file(pptx_data, as_attachment=False,
+                             download_name=f"{report_name}.pptx")
+        # Set content-disposition header with filename manually if not set
+        response.headers["Content-Disposition"] = f'attachment; filename="{report_name}.pptx"'
+        # Expose headers for CORS if necessary
+        response.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
+        return response
+
     except Exception as e:
         print(e)
         return jsonify({"status": "error", "message": str(e)}), 500
