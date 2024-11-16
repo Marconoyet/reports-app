@@ -26,8 +26,8 @@ def get_file_db(report_id):
         print(f"Database operation failed: {e}")
         raise Exception(f"Database operation failed: {e}")
     except Exception as e:
-        print(f"Error uploading report: {e}")
-        raise Exception(f"Error uploading report: {e}")
+        print(f"Error getting report: {e}")
+        raise Exception(f"Error getting report: {e}")
 
 
 def upload_file_db(report_data):
@@ -63,15 +63,18 @@ def move_file_db(file_id, from_folder, to_folder):
         raise DatabaseError(f"An unexpected error occurred: {e}")
 
 
-def delete_file_db(file_id, folder_id):
-    """Delete a file from the specified folder."""
+def delete_file_db(file_id):
+    """Delete a file from the database using MySQL."""
     try:
-        result = current_app.db.folders.update_one({"_id": ObjectId(folder_id)}, {
-            "$pull": {"files": {"_id": ObjectId(file_id)}}})
-        if result.matched_count == 0:
-            raise DatabaseError(
-                f"File with ID {file_id} not found in folder {folder_id}")
-    except PyMongoError as e:
+        file_to_delete = db.session.query(Report).filter_by(id=file_id).first()
+        if not file_to_delete:
+            raise DatabaseError(f"File with ID {file_id} not found")
+        # Delete the file
+        db.session.delete(file_to_delete)
+        db.session.commit()
+        return {"status": "success", "message": f"File with ID {file_id} deleted successfully"}
+    except SQLAlchemyError as e:
+        db.session.rollback()
         raise DatabaseError(f"Failed to delete file: {e}")
 
 

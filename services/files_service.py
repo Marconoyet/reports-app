@@ -94,10 +94,10 @@ def move_file(file_id, from_folder, to_folder):
         raise Exception(f"Service Error - Could not move file: {e}")
 
 
-def delete_file(file_id, folder_id):
+def delete_file(file_id):
     """Business logic for deleting a file from a folder."""
     try:
-        return delete_file_db(file_id, folder_id)
+        return delete_file_db(file_id)
     except DatabaseError as e:
         raise Exception(f"Service Error - Could not delete file: {e}")
 

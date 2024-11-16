@@ -60,8 +60,7 @@ def move_file_to_folder():
 @files_bp.route('/<file_id>', methods=['DELETE'])
 def delete_file_data(file_id):
     try:
-        folder_id = request.json.get('folder_id')
-        delete_file(file_id, folder_id)
+        delete_file(file_id)
         return jsonify({"status": "success", "message": "File deleted successfully"}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
