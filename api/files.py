@@ -32,7 +32,13 @@ def get_file_pdf(report_id):
         result = get_file_pdf_service(report_id)
         if "error" in result:
             return jsonify({"status": "error", "message": result["error"]}), 500
-        return send_file(result["pdf_stream"], mimetype='application/pdf', as_attachment=True, download_name=f'{result["report_name"]}.pdf')
+        response = send_file(result["pdf_stream"], mimetype='application/pdf',
+                             as_attachment=True, download_name=f'{result["report_name"]}.pdf')
+        # Set content-disposition header with filename manually if not set
+        response.headers["Content-Disposition"] = f'attachment; filename="{result["report_name"]}.pdf"'
+        # Expose headers for CORS if necessary
+        response.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
+        return response
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
