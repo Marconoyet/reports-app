@@ -6,11 +6,13 @@ from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
 from models.reports_model import Report
 from models.centers_model import Center
+from models.template_model import Template
 from .custom_exceptions import DatabaseError
 from bson.objectid import ObjectId
 from pymongo.errors import PyMongoError
 from flask import current_app
 from sqlmodel import SQLModel
+import base64
 SQLModel.metadata.schema = "u704613426_reports"
 
 
@@ -79,11 +81,13 @@ def delete_file_db(file_id):
 
 
 def get_latest_reports(limit, page, center_id=None):
-    """Retrieve paginated reports from the database along with their centers."""
+    """Retrieve paginated reports from the database along with their centers and template details."""
     try:
         # Step 1: Base query for reports with pagination and optional center filtering
-        query = Report.query.options(joinedload(
-            Report.user)).options(defer(Report.report_file))
+        query = Report.query.options(
+            joinedload(Report.user), 
+            joinedload(Report.template).defer(Template.template_file)  # Join template and avoid loading large file
+        )
 
         # Apply filtering by center_id if provided
         if center_id is not None:
@@ -93,30 +97,41 @@ def get_latest_reports(limit, page, center_id=None):
         total_records = query.count()
 
         # Apply limit and offset for pagination
-        paginated_reports = (query
-                             .order_by(Report.created_time.desc())
-                             .limit(limit)
-                             .offset((page - 1) * limit)
-                             .all())
+        paginated_reports = (
+            query.order_by(Report.created_time.desc())
+            .limit(limit)
+            .offset((page - 1) * limit)
+            .all()
+        )
 
-        # Step 2: Get unique center IDs from the reports
-        center_ids = {
-            report.center_id for report in paginated_reports if report.center_id}
+        # Step 2: Get unique center IDs and template IDs from the reports
+        center_ids = {report.center_id for report in paginated_reports if report.center_id}
+        template_ids = {report.template_id for report in paginated_reports if report.template_id}
 
-        # Step 3: Query centers once for all unique center IDs
+        # Step 3: Query centers and templates once for all unique IDs
         centers = {}
+        templates = {}
+        
         if center_ids:
-            center_records = Center.query.filter(
-                Center.id.in_(center_ids)).all()
-            centers = {center.id: center.to_dict()
-                       for center in center_records}
+            center_records = Center.query.filter(Center.id.in_(center_ids)).all()
+            centers = {center.id: center.to_dict() for center in center_records}
 
-        # Step 4: Convert reports to list of dicts and attach center data
+        if template_ids:
+            template_records = Template.query.filter(Template.id.in_(template_ids)).all()
+            templates = {
+                template.id: {
+                    **template.to_dict(),
+                    "template_image": f"data:image/png;base64,{base64.b64encode(template.template_image).decode('utf-8')}" if template.template_image else None
+                }
+                for template in template_records
+            }
+
+        # Step 4: Convert reports to list of dicts and attach center and template data
         reports_list = [
             {
                 **report.to_dict(),
-                # Attach center data if available
-                "center": centers.get(report.center_id)
+                "center": centers.get(report.center_id),  # Attach center data if available
+                "template": templates.get(report.template_id),  # Attach template data if available
             }
             for report in paginated_reports
         ]

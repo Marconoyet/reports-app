@@ -9,7 +9,6 @@ db = SQLAlchemy(metadata=default_metadata)
 
 def init_db(app):
     try:
-
         app.config.from_object(Config)
         db.init_app(app)
         with app.app_context():

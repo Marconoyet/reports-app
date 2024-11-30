@@ -1,6 +1,7 @@
 
 from pptx import Presentation
 from io import BytesIO
+import xml.etree.ElementTree as ET
 from db.reports import get_report_db
 import base64
 import re
@@ -11,6 +12,7 @@ import fitz
 from db.custom_exceptions import DatabaseError
 from db.reports import (
     add_report_db,
+    add_report_xml_db,
     get_report_db,
     delete_report_db,
     update_report_db,
@@ -18,7 +20,7 @@ from db.reports import (
 )
 from db.files import upload_file_db
 from sqlalchemy.exc import SQLAlchemyError
-from services.services_utiliy import extract_first_image_from_slide
+from services.services_utiliy import extract_first_image_from_slide, create_sample_data_with_header
 from datetime import datetime
 import threading
 import subprocess
@@ -30,6 +32,14 @@ from flask import current_app
 def allowed_file(filename):
     allowed_extensions = {'pptx'}
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
+
+def add_report_xml(report_data):
+    """Business logic for retrieving a report."""
+    try:
+        return add_report_xml_db(report_data)
+    except DatabaseError as e:
+        raise Exception(f"Service Error - Could not retrieve report: {e}")
 
 
 def add_report(report_data):
@@ -96,6 +106,57 @@ def update_report(report_id, updated_data):
         return update_report_db(report_id, updated_data)
     except DatabaseError as e:
         raise Exception(f"Service Error - Could not delete report: {e}")
+
+
+def generate_xml_report(replacements, report_id, report_name):
+    """
+    Generate a modified XML report by applying replacements to the original template.
+    Args:
+        replacements (dict): Key-value pairs to replace in the template.
+        report_id (int): ID of the report to retrieve the template.
+        report_name (str): Name of the generated report.
+    Returns:
+        BytesIO: Modified XML file as a BytesIO stream.
+    """
+    try:
+        # Step 1: Retrieve the report and file data from the database
+        report = get_file_of_report(report_id)
+        file_data = report.template_file  # XML template file from the database
+
+        if not file_data:
+            raise Exception("No template file found for the specified report.")
+
+        # Step 2: Create temporary input and output files for processing
+        with tempfile.NamedTemporaryFile(suffix=".xml", delete=False) as temp_input_file:
+            temp_input_file.write(file_data)
+            temp_input_path = temp_input_file.name
+
+        with tempfile.NamedTemporaryFile(suffix=".xml", delete=False) as temp_output_file:
+            temp_output_path = temp_output_file.name
+
+        # Step 3: Apply replacements to generate the updated XML content
+        create_sample_data_with_header(
+            temp_input_path, replacements, temp_output_path)
+
+        # Step 4: Read the modified file and return it as a BytesIO stream
+        with open(temp_output_path, 'rb') as modified_file:
+            modified_file_stream = BytesIO(modified_file.read())
+        app = current_app._get_current_object()
+        threading.Thread(target=upload_pptx_in_background,
+                         args=(modified_file_stream, report, app, report_name, True)).start()
+        return modified_file_stream
+    except Exception as e:
+        raise Exception(f"Error generating XML report: {e}")
+
+    finally:
+        # Cleanup temporary files
+        try:
+            if temp_input_path:
+                os.remove(temp_input_path)
+            if temp_output_path:
+                os.remove(temp_output_path)
+        except Exception as cleanup_error:
+            print(f"Cleanup error: {cleanup_error}")
 
 
 def generate_pptx_report(replacements, report_id, report_name):
@@ -196,15 +257,11 @@ def generate_pptx_report(replacements, report_id, report_name):
 #     return output_stream
 
 
-def upload_pptx_in_background(output_stream, report, app, report_name):
+def upload_pptx_in_background(output_stream, report, app, report_name, xml=False):
     # Prepare the report for upload
     # Read the stream into binary for upload
     report.template_file = output_stream.getvalue()
-    neededData = prepareReportForUpload(report, report_name)
-
-    # Upload the file to the database in a background thread
-
-    # Run the upload process inside the app context
+    neededData = prepareReportForUpload(report, report_name, xml)
     with app.app_context():
         try:
             upload_response = upload_file_db(neededData)
@@ -213,16 +270,11 @@ def upload_pptx_in_background(output_stream, report, app, report_name):
             print(f"Error uploading file in background: {e}")
 
 
-def prepareReportForUpload(report, report_name):
-    try:
-        # Try to convert the report to a dictionary
-        report_data = report.to_dict()
-    except AttributeError as e:
-        print(f"Error converting report to dictionary: {e}")
-        raise Exception(f"Error converting report to dictionary: {e}")
-
+def prepareReportForUpload(report, report_name, xml=False):
     try:
         # Extract the file from the report
+        image_bytes = None
+        report_data = report.to_dict()
         file = report.template_file
         if not file:
             print("The report has no associated template file.")
@@ -233,8 +285,9 @@ def prepareReportForUpload(report, report_name):
             file_io = BytesIO(file_binary_data)
         else:
             raise ValueError("Unexpected file format")
-        first_image_stream = extract_first_image_from_slide(file_io)
-        image_bytes = first_image_stream.getvalue()
+        if (xml != True):
+            first_image_stream = extract_first_image_from_slide(file_io)
+            image_bytes = first_image_stream.getvalue()
     except AttributeError as e:
         print(
             f"Error accessing the report file or file-related attributes: {e}")
@@ -267,20 +320,72 @@ def prepareReportForUpload(report, report_name):
             f"An unexpected error occurred while preparing report metadata: {e}")
 
 
+def handle_extract_xml_fields(report_id):
+    """
+    Handle the process of extracting variable names and returning report data
+    stored in the database.
+    """
+    try:
+        # Step 1: Retrieve the report file from the database
+        report = get_file_of_report(report_id)
+        file_data = report.template_file  # Binary data of the file
+
+        if not file_data:
+            raise Exception("No template file found for the specified report.")
+
+        # Step 2: Extract variable names from the file
+        fields = extract_varnames_from_svg_file(BytesIO(file_data))
+
+        # Step 3: Prepare report data with encoded template image (if exists)
+        report_data = report.to_dict()
+        if report.template_image:
+            encoded_image = base64.b64encode(
+                report.template_image).decode('utf-8')
+            report_data['template_image'] = f"data:image/png;base64,{encoded_image}"
+
+        # Step 4: Combine fields and report data
+        combined_data = {
+            "report": report_data,  # Report details
+            "fields": fields        # Extracted fields
+        }
+        return combined_data
+    except Exception as e:
+        raise Exception(
+            f"Service Error - Could not extract fields and report data: {e}")
+
+
+def extract_varnames_from_svg_file(file_stream):
+    """
+    Extract variable names (varName attributes) from an SVG file.
+    Args:
+        file_stream: A file-like object (BytesIO) containing the SVG data.
+    Returns:
+        A list of variable names found in the SVG file.
+    """
+    try:
+        # Parse the SVG content
+        tree = ET.parse(file_stream)
+        root = tree.getroot()
+
+        # Define the namespace for Adobe Variables
+        namespace = {'ns_vars': "http://ns.adobe.com/Variables/1.0/"}
+
+        # Find all variable elements
+        variables = root.findall(
+            './/ns_vars:variables/ns_vars:variable', namespaces=namespace)
+
+        # Extract the 'varName' attribute values
+        varnames = [var.get('varName')
+                    for var in variables if var.get('varName')]
+
+        return varnames
+    except ET.ParseError as e:
+        raise Exception(f"Failed to parse SVG file: {e}")
+
+
 def get_report_and_extract_fields(report_id):
     """Service layer to extract fields from PPTX or PDF files."""
     try:
-        # Retrieve the report data and file from the database
-        # report_data = get_report_db(report_id)
-        # file_id = str(report_data["fileId"])
-        # if not report_data or not report_data.get("fileId"):
-        #     raise Exception("Report or file not found")
-
-        # file_type = report_data.get("fileName").split('.')[-1].lower()
-        # if file_type == 'pptx':
-        #     fields = extract_pptx_fields(report_id)
-        # else:
-        #     raise Exception(f"Unsupported file type: {file_type}")
         fields = extract_pptx_fields(report_id)
         return fields
     except Exception as e:

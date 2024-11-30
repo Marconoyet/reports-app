@@ -5,6 +5,7 @@ from sqlalchemy import func
 from models.users_model import User
 from models.template_model import Template
 from models.centers_model import Center
+from models.reports_model import Report
 from db.db_utils import execute_query
 from db.custom_exceptions import DatabaseError
 import base64
@@ -94,11 +95,39 @@ def update_center_db(center_id, updated_data):
 
 def delete_center_db(center_id):
     try:
+        # Step 1: Delete all reports associated with the center
+        execute_query(
+            action='delete',
+            model=Report,
+            filters={'center_id': center_id}
+        )
+
+        # Step 2: Delete all templates associated with the center
+        execute_query(
+            action='delete',
+            model=Template,
+            filters={'center_id': center_id}
+        )
+
+        # Step 3: Update users associated with the center, but keep SuperAdmins
+        db.session.query(User).filter(
+            User.center_id == center_id, User.role != 'SuperAdmin'
+        ).delete(synchronize_session=False)
+
+        # Step 4: Set `center_id` to None for SuperAdmins in the specified center
+        db.session.query(User).filter(
+            User.center_id == center_id, User.role == 'SuperAdmin'
+        ).update({"center_id": None}, synchronize_session=False)
+
+        # Step 5: Delete the center itself
         result = execute_query(
             action='delete',
             model=Center,
             filters={'id': center_id}
         )
+
+        # Commit the transaction
+        db.session.commit()
 
         if result == "No records found to delete":
             raise DatabaseError(
@@ -106,7 +135,12 @@ def delete_center_db(center_id):
 
         return result
     except SQLAlchemyError as e:
-        raise DatabaseError(f"Failed to delete center: {e}")
+        db.session.rollback()
+        raise DatabaseError(
+            f"Failed to delete center and associated data: {e}")
+    except Exception as e:
+        db.session.rollback()
+        raise Exception(f"Unexpected error during deletion: {e}")
 
 
 def list_centers_db():

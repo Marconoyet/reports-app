@@ -24,6 +24,18 @@ def add_report_db(report_data):
         raise DatabaseError(f"An unexpected error occurred: {e}")
 
 
+def add_report_xml_db(report_data):
+    """Insert a new report into the MySQL database using SQLAlchemy."""
+    try:
+        new_report_id = execute_query(
+            'insert', model=Template, data=report_data)
+        return new_report_id
+    except SQLAlchemyError as e:
+        raise DatabaseError(f"Database operation failed: {e}")
+    except Exception as e:
+        raise DatabaseError(f"An unexpected error occurred: {e}")
+
+
 def get_report_db(report_id):
     """Retrieve a report by its ID."""
     try:
@@ -40,32 +52,64 @@ def get_report_db(report_id):
 def update_report_db(report_id, updated_data):
     """Update report information by its ID."""
     try:
+        # Decode the base64 template_file if present
+        if "template_file" in updated_data and updated_data["template_file"]:
+            updated_data["template_file"] = base64.b64decode(
+                updated_data["template_file"])
+
+        # Decode the base64 template_image if present
+        if "template_image" in updated_data and updated_data["template_image"]:
+            base64_data = updated_data["template_image"].split(",")[1]
+            updated_data["template_image"] = base64.b64decode(base64_data)
+
         filters = {'id': report_id}
-        result = execute_query('update', model=Report,
+        result = execute_query('update', model=Template,
                                data=updated_data, filters=filters)
+
         if result == "No records found to update":
             raise Exception(f"Report with ID {report_id} not found for update")
         return result
+
     except Exception as e:
         raise Exception(f"Failed to update report: {e}")
 
 
 def delete_report_db(report_id):
-    """Delete a report by its ID using SQLAlchemy."""
+    """Delete a report by its ID and clean up related foreign key dependencies."""
     try:
-        # Use SQLAlchemy to delete the report by its ID
-        filters = {'id': report_id}
+        # Start a transaction explicitly
+        db.session.begin()
 
-        # Call execute_query to delete the report
-        result = execute_query('delete', model=Report, filters=filters)
+        # Delete dependent records in the Report table
+        dependent_deleted = db.session.query(Report).filter_by(
+            template_id=report_id).delete(synchronize_session=False)
+        print(f"Dependent rows deleted: {dependent_deleted}")
 
+        # Delete the main record in the Template table
+        filters = {'id': int(report_id)}
+        result = execute_query('delete', model=Template, filters=filters)
+        print(f"Template deletion result: {result}")
+
+        # If no main records were deleted, raise an exception
         if result == "No records found to delete":
-            raise Exception(
+            raise ValueError(
                 f"Report with ID {report_id} not found for deletion")
 
+        # Commit the transaction manually
+        db.session.commit()
+
+        return {"status": "success", "details": "Report and related dependencies deleted."}
+
     except SQLAlchemyError as e:
-        db.session.rollback()
-        raise Exception(f"Failed to delete report: {e}")
+        db.session.rollback()  # Rollback transaction on failure
+        # If a connection error occurred after successful deletion
+        if "Lost connection" in str(e):
+            return {"status": "partial_success", "warning": "Lost connection during commit, but deletion likely succeeded."}
+        raise Exception(f"Database error during deletion: {str(e)}")
+
+    except Exception as e:
+        db.session.rollback()  # Rollback transaction on any unexpected error
+        raise Exception(f"Failed to delete report: {str(e)}")
 
 
 def get_folder_templates(folder_id):
@@ -119,7 +163,7 @@ def get_file_of_report(report_id):
         if not report.template_file:
             raise DatabaseError(
                 f"Report with ID {report_id} has no file associated with it")
-        
+
         return report  # Return the binary data of the PPTX file
 
     except SQLAlchemyError as e:

@@ -23,6 +23,7 @@ class Report(db.Model):
     created_time = Column(DateTime, default=datetime.utcnow)
     center_id = db.Column(db.Integer, db.ForeignKey(Center.id))
     user = db.relationship("User")
+    template = db.relationship("Template")
 
     def __repr__(self):
         return f"<Report(id={self.id}, report_name={self.report_name}, created_time={self.created_time})>"

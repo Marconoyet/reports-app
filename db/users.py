@@ -49,7 +49,8 @@ def create_user_db(user_data, center_id):
         # Return the user data with the associated center data as an embedded object
         return {
             **data,
-            "center": center_data if center_data else None  # Assuming center_data has a to_dict method
+            # Assuming center_data has a to_dict method
+            "center": center_data if center_data else None
         }
 
     except SQLAlchemyError as e:
@@ -57,19 +58,22 @@ def create_user_db(user_data, center_id):
         raise Exception(f"Failed to create user: {e}")
 
 
-
-def get_user_db(user_id):
+def get_user_db(user_id, include_password=False):
     """Retrieve a user by their ID from the SQL database."""
     try:
         user = db.session.query(User).filter_by(id=user_id).first()
         if not user:
             raise DatabaseError(f"User with ID {user_id} not found")
-        return user.to_dict()  # Assuming the User model has a to_dict method
+        user_dict = user.to_dict()
+        if include_password:
+            user_dict["password"] = user.password
+        return user_dict  # Assuming the User model has a to_dict method
     except SQLAlchemyError as e:
         raise DatabaseError(f"Error retrieving user: {e}")
     except Exception as e:
         raise DatabaseError(f"An unexpected error occurred: {e}")
-    
+
+
 def get_user_db_basic(user_id):
     """Retrieve a user by their ID from the SQL database, excluding image data."""
     try:
@@ -95,7 +99,6 @@ def get_user_db_basic(user_id):
         raise DatabaseError(f"Error retrieving user: {e}")
     except Exception as e:
         raise DatabaseError(f"An unexpected error occurred: {e}")
-    
 
 
 def update_user_db(user_id, updated_data):
@@ -146,12 +149,13 @@ def list_users_db(center_id=None):
     """Retrieve users along with their associated center details."""
     try:
         # Base query to fetch users and their associated centers
-        query = db.session.query(User, Center).outerjoin(Center, User.center_id == Center.id)
-        
+        query = db.session.query(User, Center).outerjoin(
+            Center, User.center_id == Center.id)
+
         # Apply filter if center_id is provided
         if center_id is not None:
             query = query.filter(User.center_id == center_id)
-        
+
         # Execute the query
         users_with_centers = query.all()
 
@@ -176,8 +180,8 @@ def list_users_db(center_id=None):
         return users_list
 
     except SQLAlchemyError as e:
-        raise DatabaseError(f"Failed to retrieve users with center details: {e}")
-
+        raise DatabaseError(
+            f"Failed to retrieve users with center details: {e}")
 
 
 def check_email_db(email):
@@ -213,7 +217,8 @@ def check_user_credentials(username_or_email, client_hashed_password):
     try:
         # Retrieve the user from the database by username or email
         user = db.session.query(User).filter(
-            (User.email == username_or_email) | (User.username == username_or_email)
+            (User.email == username_or_email) | (
+                User.username == username_or_email)
         ).first()
 
         # If no user is found with the provided username or email
@@ -226,7 +231,8 @@ def check_user_credentials(username_or_email, client_hashed_password):
             # Retrieve center data if the user has a center_id
             center = None
             if user.center_id:
-                center = get_center_db(user.center_id)  # Retrieve center using the provided function
+                # Retrieve center using the provided function
+                center = get_center_db(user.center_id)
 
             # Use the model's to_dict method for JSON serialization
             return {
@@ -240,4 +246,3 @@ def check_user_credentials(username_or_email, client_hashed_password):
 
     except SQLAlchemyError as e:
         raise Exception(f"Failed to check user credentials: {e}")
-

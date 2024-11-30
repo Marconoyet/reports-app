@@ -3,6 +3,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from bson.objectid import ObjectId
 from .custom_exceptions import DatabaseError
 from models.folder_model import Folder
+from models.reports_model import Report
 from db.db_utils import execute_query
 from models.template_model import Template
 from models.centers_model import Center
@@ -14,13 +15,13 @@ def create_folder_db(folder_data, center_id, role):
     try:
         # Assign center_id only if role is not 'SuperAdmin' or if provided center_id is None
         if role != 'SuperAdmin' or not center_id:
-            folder_data['center_id'] = center_id  # Automatically assign center_id for non-SuperAdmin
+            # Automatically assign center_id for non-SuperAdmin
+            folder_data['center_id'] = center_id
 
         new_folder_id = execute_query('insert', model=Folder, data=folder_data)
         return new_folder_id
     except SQLAlchemyError as e:
         raise DatabaseError(f"An unexpected error occurred: {e}")
-
 
 
 def get_folder_db(folder_id):
@@ -69,35 +70,43 @@ def update_folder_db(folder_id, updated_data):
 
 def delete_folder_db(folder_id):
     """
-    Delete a folder by its ID and delete all associated templates.
+    Delete a folder by its ID, delete all associated templates, and delete all
+    reports associated with those templates.
 
     :param folder_id: The ID of the folder to delete.
     """
     try:
-        # Step 1: Delete all templates associated with this folder
-        execute_query(
-            action='delete',
-            model=Template,
-            filters={'folder_id': folder_id}
-        )
+        # Start a transaction
+        with db.session.begin():
+            # Step 1: Retrieve template IDs associated with this folder
+            templates_to_delete = db.session.query(
+                Template.id).filter_by(folder_id=folder_id).all()
+            template_ids = [template.id for template in templates_to_delete]
 
-        # Step 2: Delete the folder itself
-        result = execute_query(
-            action='delete',
-            model=Folder,
-            filters={'id': folder_id}
-        )
+            # Step 2: Delete all reports associated with these templates
+            if template_ids:
+                db.session.query(Report).filter(Report.template_id.in_(
+                    template_ids)).delete(synchronize_session=False)
 
-        if result == "No records found to delete":
-            raise Exception(
-                f"Folder with ID {folder_id} not found for deletion")
+            # Step 3: Delete all templates associated with this folder
+            db.session.query(Template).filter_by(
+                folder_id=folder_id).delete(synchronize_session=False)
 
-        return f"Folder and associated templates deleted successfully."
+            # Step 4: Delete the folder itself
+            folder_deleted = db.session.query(Folder).filter_by(
+                id=folder_id).delete(synchronize_session=False)
+
+            if folder_deleted == 0:
+                raise Exception(
+                    f"Folder with ID {folder_id} not found for deletion")
+
+        return "Folder, associated templates, and reports deleted successfully."
 
     except SQLAlchemyError as e:
         db.session.rollback()
         raise Exception(
-            f"Failed to delete folder and associated templates: {e}")
+            f"Failed to delete folder, templates, and reports: {e}"
+        )
 
 
 def add_file_to_folder_db(folder_id, file_metadata):
@@ -123,6 +132,7 @@ def add_file_to_folder_db(folder_id, file_metadata):
     except Exception as e:
         raise DatabaseError(f"An unexpected error occurred: {e}")
 
+
 def list_folders_db(role, center_id=None):
     """Retrieve a list of folders based on the user's role, including center details."""
     try:
@@ -135,21 +145,21 @@ def list_folders_db(role, center_id=None):
             Center.name.label('center_name'),  # Fetch center name
             Center.color.label('center_color')  # Fetch center color
         ).outerjoin(Template, Folder.id == Template.folder_id
-        ).outerjoin(Center, Folder.center_id == Center.id)  # Join with Center table
+                    ).outerjoin(Center, Folder.center_id == Center.id)  # Join with Center table
 
         if role == "Admin":
             if center_id is not None:
                 query = query.filter(Folder.center_id == center_id)
             else:
-                raise Exception("Center ID is required for Admins.")    
+                raise Exception("Center ID is required for Admins.")
         elif role == "Member":
             if center_id is not None:
                 query = query.filter(Folder.center_id == center_id)
             else:
                 raise Exception("Center ID is required for Members.")
-                
+
         folders_with_template_count = query.group_by(Folder.id).all()
-        
+
         folder_list = [
             {
                 'id': folder.id,
@@ -167,4 +177,3 @@ def list_folders_db(role, center_id=None):
 
     except SQLAlchemyError as e:
         raise Exception(f"Failed to list folders: {e}")
-

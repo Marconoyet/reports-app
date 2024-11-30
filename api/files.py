@@ -14,9 +14,9 @@ def get_file(report_id):
 
         report_name, pptx_data = get_file_service(report_id)
         response = send_file(pptx_data, as_attachment=False,
-                             download_name=f"{report_name}.pptx")
+                             download_name=f"{report_name}.xml")
         # Set content-disposition header with filename manually if not set
-        response.headers["Content-Disposition"] = f'attachment; filename="{report_name}.pptx"'
+        response.headers["Content-Disposition"] = f'attachment; filename="{report_name}.xml"'
         # Expose headers for CORS if necessary
         response.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
         return response
