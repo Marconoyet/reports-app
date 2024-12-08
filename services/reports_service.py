@@ -4,11 +4,9 @@ from io import BytesIO
 import xml.etree.ElementTree as ET
 from db.reports import get_report_db
 import base64
-import re
 from spire.pdf.common import *
 from spire.pdf import *
 from io import BytesIO
-import fitz
 from db.custom_exceptions import DatabaseError
 from db.reports import (
     add_report_db,
@@ -26,7 +24,73 @@ import threading
 import subprocess
 import tempfile
 import os
+import rarfile
+from zipfile import ZipFile
+from bs4 import BeautifulSoup
 from flask import current_app
+import mimetypes
+
+
+def process_rar_file(rar_file):
+    try:
+        with rarfile.RarFile(rar_file) as rf:
+            html_file = None
+            images = {}
+            for file in rf.namelist():
+                if file.endswith(".html"):
+                    html_file = rf.read(file).decode("utf-8")
+                elif file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg')):
+                    images[file] = base64.b64encode(
+                        rf.read(file)).decode('utf-8')
+
+            if not html_file:
+                raise Exception("No HTML file found in RAR archive")
+
+            return embed_images_in_html(html_file, images)
+    except rarfile.Error as e:
+        raise Exception(f"Error processing RAR file: {e}")
+
+
+def process_zip_file(zip_file):
+    try:
+        # Unzip the file into memory
+        with ZipFile(zip_file) as z:
+            # Extract the HTML file and images
+            html_file = None
+            images = {}
+            for filename in z.namelist():
+                if filename.endswith(".html"):
+                    html_file = z.read(filename).decode('utf-8')
+                elif filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg')):
+                    images[filename] = base64.b64encode(
+                        z.read(filename)).decode('utf-8')
+
+            if not html_file:
+                raise Exception("No HTML file found in ZIP")
+
+            # Embed images into HTML
+            return embed_images_in_html(html_file, images)
+
+    except Exception as e:
+        raise Exception(f"Error processing ZIP file: {e}")
+
+
+def embed_images_in_html(html_content, images):
+    soup = BeautifulSoup(html_content, "html.parser")
+
+    for img_tag in soup.find_all("img"):
+        img_src = img_tag.get("src")
+        if img_src in images:
+            # Detect MIME type based on the file extension
+            mime_type, _ = mimetypes.guess_type(img_src)
+            if not mime_type:
+                mime_type = "application/octet-stream"  # Default MIME type
+            # Replace src with Base64-encoded data
+            img_tag["src"] = f"data:{mime_type};base64,{images[img_src]}"
+        else:
+            print(f"Warning: Image {img_src} not found in ZIP.")
+
+    return str(soup)
 
 
 def allowed_file(filename):
@@ -228,35 +292,6 @@ def generate_pptx_report(replacements, report_id, report_name):
     return pptx_stream, pdf_stream, pdf_error
 
 
-# def generate_pptx_report(replacements, report_id, report_name):
-#     report = get_file_of_report(report_id)
-#     file_data = report.template_file
-#     presentation = Presentation(BytesIO(file_data))
-
-#     # Replace the fields in the PPTX
-#     for slide in presentation.slides:
-#         for shape in slide.shapes:
-#             if not hasattr(shape, "text_frame"):
-#                 continue
-#             for paragraph in shape.text_frame.paragraphs:
-#                 for run in paragraph.runs:
-#                     for key, value in replacements.items():
-#                         if key in run.text:
-#                             run.text = run.text.replace(key, value)
-
-#     # Save the modified presentation to a BytesIO stream
-#     output_stream = BytesIO()
-#     presentation.save(output_stream)
-#     output_stream.seek(0)
-#     # Start a background thread to handle the file upload process
-#     app = current_app._get_current_object()
-#     threading.Thread(target=upload_pptx_in_background,
-#                      args=(output_stream, report, app, report_name)).start()
-
-#     # Return the stream to the client
-#     return output_stream
-
-
 def upload_pptx_in_background(output_stream, report, app, report_name, xml=False):
     # Prepare the report for upload
     # Read the stream into binary for upload
@@ -321,32 +356,27 @@ def prepareReportForUpload(report, report_name, xml=False):
 
 
 def handle_extract_xml_fields(report_id):
-    """
-    Handle the process of extracting variable names and returning report data
-    stored in the database.
-    """
     try:
         # Step 1: Retrieve the report file from the database
         report = get_file_of_report(report_id)
         file_data = report.template_file  # Binary data of the file
 
-        if not file_data:
-            raise Exception("No template file found for the specified report.")
+        # Decode the binary HTML data to a UTF-8 string (if it is an HTML file)
+        html_file_content = file_data.decode('utf-8') if file_data else None
 
-        # Step 2: Extract variable names from the file
-        fields = extract_varnames_from_svg_file(BytesIO(file_data))
-
-        # Step 3: Prepare report data with encoded template image (if exists)
+        # Step 3: Prepare report data
         report_data = report.to_dict()
         if report.template_image:
             encoded_image = base64.b64encode(
                 report.template_image).decode('utf-8')
             report_data['template_image'] = f"data:image/png;base64,{encoded_image}"
 
+        # Include the HTML content directly
+        report_data["template_file"] = html_file_content
+
         # Step 4: Combine fields and report data
         combined_data = {
             "report": report_data,  # Report details
-            "fields": fields        # Extracted fields
         }
         return combined_data
     except Exception as e:
@@ -414,35 +444,3 @@ def extract_pptx_fields(report_id):
         "fields": fields  # Templates associated with the folder
     }
     return combined_data
-
-
-def remove_non_english(text):
-    # Use regex to find and keep only English letters, numbers, and spaces
-    cleaned_text = re.sub(r'[^a-zA-Z0-9#_ ]', '', text)
-    return cleaned_text
-
-
-def extract_pdf_fields(file_id):
-    """Extract fields from a PDF file stored in GridFS."""
-    pdf_data = get_file_from_gridfs(
-        file_id)  # Function to retrieve PDF from GridFS
-    pdf_stream = BytesIO(pdf_data)
-
-    # Open the PDF file with fitz (PyMuPDF)
-    document = fitz.open(stream=pdf_stream, filetype="pdf")
-    fields = []
-
-    # Loop through each page of the PDF
-    for page_num in range(document.page_count):
-        page = document.load_page(page_num)  # Load each page
-        text = page.get_text("text")  # Extract plain text from the page
-
-        # Print for debugging
-
-        # Add logic to find specific markers in the PDF text (e.g., #field_name)
-        for line in text.splitlines():
-            if "#" in line:
-                fields.append(remove_non_english(line.strip()))
-
-    document.close()
-    return fields

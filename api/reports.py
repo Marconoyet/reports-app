@@ -1,10 +1,13 @@
+import os
 from io import BytesIO
 from flask import Blueprint, request, jsonify, send_file
 import zipfile
-from services.reports_service import generate_pptx_report, get_report_and_extract_fields, handle_extract_xml_fields, generate_xml_report, add_report, get_report, delete_report, update_report, add_report_xml
+from services.reports_service import generate_pptx_report, process_rar_file, process_zip_file, get_report_and_extract_fields, handle_extract_xml_fields, generate_xml_report, add_report, get_report, delete_report, update_report, add_report_xml
 from services.files_service import modify_pdf_metadata
 from datetime import datetime
 import base64
+import io
+from werkzeug.utils import secure_filename
 reports_bp = Blueprint('reports', __name__)
 
 
@@ -55,8 +58,7 @@ def create_new_report_xml():
             image_binary_data = base64.b64decode(base64_data)
         else:
             image_binary_data = None
-        if file.mimetype != 'text/xml':
-            raise Exception("Invalid file type. Only XML files are allowed.")
+
         data = {
             "template_name": report_name,
             "template_description": report_description,
@@ -121,6 +123,37 @@ def extract_fields(report_id):
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@reports_bp.route('/process-zip', methods=['POST'])
+def process_zip():
+    try:
+        uploaded_file = request.files.get('file')
+        if not uploaded_file:
+            return jsonify({"status": "error", "message": "No file uploaded"}), 400
+
+        # Check MIME type
+        allowed_mime_types = [
+            "application/zip",
+            "application/x-compressed",
+            "application/x-zip-compressed"
+        ]
+        if uploaded_file.mimetype not in allowed_mime_types:
+            # Fallback: Check file extension
+            if not uploaded_file.filename.endswith('.zip'):
+                return jsonify({"status": "error", "message": "Invalid file type. Only .zip files are allowed."}), 400
+
+        # Process the file as ZIP
+        processed_html = process_zip_file(uploaded_file)
+
+        return send_file(
+            io.BytesIO(processed_html.encode('utf-8')),
+            mimetype="text/html",
+            as_attachment=True,
+            download_name="processed_report.html"
+        )
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @reports_bp.route('/generate-xml', methods=['POST'])
 def generate_report_xml():
     try:
@@ -179,23 +212,3 @@ def generate_report_api():
             return jsonify({"status": "error", "message": "Unsupported file type"}), 400
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
-
-# @reports_bp.route('/<report_id>/extract-fields', methods=['GET'])
-# def extract_fields(report_id):
-#     try:
-#         print(report_id)
-#         result = get_report_and_extract_fields(report_id)
-#         return jsonify({"status": "success", "fields": result}), 200
-#     except Exception as e:
-#         return jsonify({"status": "error", "message": str(e)}), 500
-
-# # Endpoint to generate the report and send back the modified PPTX
-# @reports_bp.route('/generate', methods=['POST'])
-# def generate_report_api():
-#     try:
-#         data = request.json
-#         pptx_data = generate_report(data['replacements'], data['filename'])
-#         return send_file(pptx_data, as_attachment=True, download_name="modified_presentation.pptx")
-#     except Exception as e:
-#         return jsonify({"status": "error", "message": str(e)}), 500
