@@ -3,6 +3,7 @@ from sqlalchemy import desc
 from flask import current_app
 from db import db
 
+
 def execute_query(action, model=None, data=None, filters=None, limit=None):
     """General function to connect to the database and execute queries."""
     try:
@@ -18,7 +19,8 @@ def execute_query(action, model=None, data=None, filters=None, limit=None):
                 # Fetch records with optional filters and a limit
                 if filters is None:
                     filters = {}
-                result = model.query.filter_by(**filters).order_by(desc(model.created_time)).limit(limit).all()
+                result = model.query.filter_by(
+                    **filters).order_by(desc(model.created_time)).limit(limit).all()
                 return result
 
             elif action == 'insert':
@@ -48,8 +50,9 @@ def execute_query(action, model=None, data=None, filters=None, limit=None):
 
     except OperationalError as oe:
         db.session.rollback()
-        raise Exception(f"Database operation failed: MySQL Connection not available. {oe}")
-    
+        raise Exception(
+            f"Database operation failed: MySQL Connection not available. {oe}")
+
     except SQLAlchemyError as e:
         db.session.rollback()
         raise Exception(f"Database operation failed: {e}")

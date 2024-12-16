@@ -16,7 +16,7 @@ from db.reports import (
     update_report_db,
     get_file_of_report
 )
-from db.files import upload_file_db
+from db.files import upload_file_db, get_report_with_template_data
 from sqlalchemy.exc import SQLAlchemyError
 from services.services_utiliy import extract_first_image_from_slide, create_sample_data_with_header
 from datetime import datetime
@@ -173,15 +173,7 @@ def update_report(report_id, updated_data):
 
 
 def generate_xml_report(replacements, report_id, report_name):
-    """
-    Generate a modified XML report by applying replacements to the original template.
-    Args:
-        replacements (dict): Key-value pairs to replace in the template.
-        report_id (int): ID of the report to retrieve the template.
-        report_name (str): Name of the generated report.
-    Returns:
-        BytesIO: Modified XML file as a BytesIO stream.
-    """
+
     try:
         # Step 1: Retrieve the report and file data from the database
         report = get_file_of_report(report_id)
@@ -355,26 +347,30 @@ def prepareReportForUpload(report, report_name, xml=False):
             f"An unexpected error occurred while preparing report metadata: {e}")
 
 
-def handle_extract_xml_fields(report_id):
+def handle_extract_xml_fields(report_id, viewer=False):
     try:
         # Step 1: Retrieve the report file from the database
-        report = get_file_of_report(report_id)
-        file_data = report.template_file  # Binary data of the file
+        print(viewer)
+        if viewer:
+            report_data = get_report_with_template_data(report_id)
 
-        # Decode the binary HTML data to a UTF-8 string (if it is an HTML file)
-        html_file_content = file_data.decode('utf-8') if file_data else None
+        else:
+            report = get_file_of_report(report_id)
+            file_data = report.template_file  # Binary data of the file
+            # Decode the binary HTML data to a UTF-8 string (if it is an HTML file)
+            html_file_content = file_data.decode(
+                'utf-8') if file_data else None
+            # Step 3: Prepare report data
+            report_data = report.to_dict()
+            if report.template_image:
+                encoded_image = base64.b64encode(
+                    report.template_image).decode('utf-8')
+                report_data['template_image'] = f"data:image/png;base64,{encoded_image}"
 
-        # Step 3: Prepare report data
-        report_data = report.to_dict()
-        if report.template_image:
-            encoded_image = base64.b64encode(
-                report.template_image).decode('utf-8')
-            report_data['template_image'] = f"data:image/png;base64,{encoded_image}"
+            # Include the HTML content directly
+            report_data["template_file"] = html_file_content
 
-        # Include the HTML content directly
-        report_data["template_file"] = html_file_content
-
-        # Step 4: Combine fields and report data
+            # Step 4: Combine fields and report data
         combined_data = {
             "report": report_data,  # Report details
         }

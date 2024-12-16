@@ -1,12 +1,15 @@
 import os
+from flask import current_app
 from io import BytesIO
 from flask import Blueprint, request, jsonify, send_file
 import zipfile
 from services.reports_service import generate_pptx_report, process_rar_file, process_zip_file, get_report_and_extract_fields, handle_extract_xml_fields, generate_xml_report, add_report, get_report, delete_report, update_report, add_report_xml
-from services.files_service import modify_pdf_metadata
+from services.files_service import modify_pdf_metadata, create_file_service
+from db.files import update_file_db
 from datetime import datetime
 import base64
 import io
+import threading
 from werkzeug.utils import secure_filename
 reports_bp = Blueprint('reports', __name__)
 
@@ -86,12 +89,49 @@ def get_report_data(report_id):
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+def run_in_app_context(app, func, *args, **kwargs):
+    """
+    Runs a function inside the given Flask application context.
+    """
+    with app.app_context():  # Use the passed app to create the context
+        func(*args, **kwargs)
+
+
 @reports_bp.route('/<report_id>', methods=['PUT'])
 def update_report_data(report_id):
     try:
-        updated_data = request.json
-        update_report(report_id, updated_data)
+        viewer = request.args.get('viewer', 'false')
+        is_viewer = viewer.lower() == 'true'
+        if not request.content_type.startswith('multipart/form-data'):
+            raise Exception(
+                "Invalid Content-Type. Expected multipart/form-data")
+
+        # Extract file and form data
+        file = request.files.get('template_file')  # Get the uploaded file
+        if not file:
+            raise Exception("No file provided in the request")
+        file_content = file.read()  # Read file content
+
+        report_name = request.form.get("reportName")  # Get report name
+
+        saving = request.form.get("saving", type=bool)  # Get saving flag
+
+        if saving and not is_viewer:
+            app = current_app._get_current_object()  # Pass the actual Flask app
+            thread = threading.Thread(target=run_in_app_context, args=(app, create_file_service, report_id, {
+                "template_file": file_content,
+                "report_name": report_name
+            }))
+            thread.start()
+        # Update the database with the file content
+        if is_viewer:
+            updated_data = {"report_file": file_content}
+            update_file_db(report_id, updated_data)
+        else:
+            updated_data = {"template_file": file_content}
+            update_report(report_id, updated_data)
         return jsonify({"status": "success", "message": "Report updated successfully"}), 200
+
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -108,7 +148,10 @@ def delete_report_data(report_id):
 @reports_bp.route('/<string:report_id>/extract-xml-fields', methods=['GET'])
 def extract_xml_fields(report_id):
     try:
-        fields = handle_extract_xml_fields(report_id)
+        # Get `viewer` query parameter
+        viewer = request.args.get('viewer', 'false')
+        is_viewer = viewer.lower() == 'true'          # Convert to boolean
+        fields = handle_extract_xml_fields(report_id, is_viewer)
         return jsonify({"status": "success", "data": fields, "report_id": report_id}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

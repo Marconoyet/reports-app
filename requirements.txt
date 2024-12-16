@@ -36,4 +36,5 @@ validators==0.20.0
 watchdog==3.0.0
 bcrypt==4.2.0
 Flask-JWT-Extended==4.6.0
-rarfile==4.2
+rarfile==4.2.0
+beautifulsoup4 == 4.12.3

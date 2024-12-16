@@ -9,24 +9,54 @@ from db.files import (
     delete_file_db,
     get_latest_reports
 )
+
+from db.reports import get_file_of_report
 from db.custom_exceptions import DatabaseError
 import fitz  # PyMuPDF
 from io import BytesIO
-# import pythoncom
+from datetime import datetime
 import tempfile
 
 
+def create_file_service(report_id, file_data):
+    """Business logic for creating and saving a file."""
+    try:
+        # Fetch existing report metadata
+        report = get_file_of_report(report_id)
+        report_data = report.to_dict()
+        report_name = file_data.get("report_name")
+        if not report_name or report_name == 'undefined':
+            report_name = report_data.get("template_name")
+
+        # Prepare metadata for the file
+        report_metadata = {
+            "report_name": report_name,  # Name of the report
+            # Template ID (foreign key)
+            "template_id": report_data.get("id"),
+            # Binary file content
+            "report_file": file_data.get("template_file"),
+            "center_id": report_data.get("center_id"),
+            "user_id": report_data.get("user_id"),
+            "created_time": datetime.now()                # Current timestamp
+        }
+
+        # Save file metadata to the database
+        file_id = upload_file_db(report_metadata)
+        print(f"File saved successfully with ID: {file_id}")
+
+    except DatabaseError as e:
+        print(e)
+        print(f"Error in create_file_service: {e}")
+
+
 def get_file_service(report_Id):
-    """Business logic for uploading a file to a folder."""
     try:
         report = get_file_db(report_Id)
         report.report_file = BytesIO(report.report_file)
         return report.report_name, report.report_file
-        # pdf_file = convert_pptx_to_pdf(report.report_file)
-        # return report.report_name, report.report_file, pdf_file
     except DatabaseError as e:
         print(e)
-        raise Exception(f"Service Error - Could not upload file: {e}")
+        raise Exception(f"Service Error - Could not get file: {e}")
 
 
 def get_file_pdf_service(report_id):

@@ -1,17 +1,35 @@
+import os
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import (
     jwt_required,
     get_jwt_identity,
 )
 from services.users_service import get_user_role
 from flask import Blueprint, request, jsonify, send_file
-from services.files_service import get_file_service, move_file, delete_file, get_files, get_file_pdf_service, modify_pdf_metadata
+from services.files_service import get_file_service, move_file, delete_file, get_files, get_file_pdf_service, modify_pdf_metadata, create_file_service
 files_bp = Blueprint('files', __name__)
+
+
+files_bp = Blueprint('files', __name__)
+
+
+@files_bp.route('/<int:report_id>', methods=['POST'])
+def create_file(report_id):
+    try:
+        create_file = create_file_service(report_id)
+        return jsonify({
+            "status": "success",
+            "message": f"File uploaded and saved successfully"
+        }), 201
+
+    except Exception as e:
+        print(f"Error creating file: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @files_bp.route('/<int:report_id>', methods=['GET'])
 def get_file(report_id):
     try:
-
         report_name, pptx_data = get_file_service(report_id)
         response = send_file(pptx_data, as_attachment=False,
                              download_name=f"{report_name}.xml")

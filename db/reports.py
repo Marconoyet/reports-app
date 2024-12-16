@@ -52,10 +52,6 @@ def get_report_db(report_id):
 def update_report_db(report_id, updated_data):
     """Update report information by its ID."""
     try:
-        # Decode the base64 template_file if present
-        if "template_file" in updated_data and updated_data["template_file"]:
-            updated_data["template_file"] = base64.b64decode(
-                updated_data["template_file"])
 
         # Decode the base64 template_image if present
         if "template_image" in updated_data and updated_data["template_image"]:
@@ -65,7 +61,7 @@ def update_report_db(report_id, updated_data):
         filters = {'id': report_id}
         result = execute_query('update', model=Template,
                                data=updated_data, filters=filters)
-
+        print("updated data")
         if result == "No records found to update":
             raise Exception(f"Report with ID {report_id} not found for update")
         return result
