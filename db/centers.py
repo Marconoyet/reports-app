@@ -92,55 +92,39 @@ def update_center_db(center_id, updated_data):
         db.session.rollback()
         raise DatabaseError(f"Failed to update center and assign users: {e}")
 
-
 def delete_center_db(center_id):
     try:
-        # Step 1: Delete all reports associated with the center
-        execute_query(
-            action='delete',
-            model=Report,
-            filters={'center_id': center_id}
-        )
+        # Start a transaction
+        with db.session.begin_nested():
+            # Step 1: Delete all reports associated with the center
+            db.session.query(Report).filter(Report.center_id == center_id).delete(synchronize_session=False)
 
-        # Step 2: Delete all templates associated with the center
-        execute_query(
-            action='delete',
-            model=Template,
-            filters={'center_id': center_id}
-        )
+            # Step 2: Delete all templates associated with the center
+            db.session.query(Template).filter(Template.center_id == center_id).delete(synchronize_session=False)
 
-        # Step 3: Update users associated with the center, but keep SuperAdmins
-        db.session.query(User).filter(
-            User.center_id == center_id, User.role != 'SuperAdmin'
-        ).delete(synchronize_session=False)
+            # Step 3: Delete all users except SuperAdmins
+            db.session.query(User).filter(User.center_id == center_id, User.role != 'SuperAdmin').delete(synchronize_session=False)
 
-        # Step 4: Set `center_id` to None for SuperAdmins in the specified center
-        db.session.query(User).filter(
-            User.center_id == center_id, User.role == 'SuperAdmin'
-        ).update({"center_id": None}, synchronize_session=False)
+            # Step 4: Update center_id to None for SuperAdmins
+            db.session.query(User).filter(User.center_id == center_id, User.role == 'SuperAdmin').update({"center_id": None}, synchronize_session=False)
 
-        # Step 5: Delete the center itself
-        result = execute_query(
-            action='delete',
-            model=Center,
-            filters={'id': center_id}
-        )
+            # Step 5: Delete the center itself
+            center_deleted = db.session.query(Center).filter(Center.id == center_id).delete(synchronize_session=False)
+
+            if not center_deleted:
+                raise DatabaseError(f"Center with ID {center_id} not found for deletion")
 
         # Commit the transaction
         db.session.commit()
 
-        if result == "No records found to delete":
-            raise DatabaseError(
-                f"Center with ID {center_id} not found for deletion")
+        return f"Center with ID {center_id} and associated data deleted successfully."
 
-        return result
     except SQLAlchemyError as e:
         db.session.rollback()
-        raise DatabaseError(
-            f"Failed to delete center and associated data: {e}")
+        raise DatabaseError(f"Failed to delete center and associated data: {str(e)}")
     except Exception as e:
         db.session.rollback()
-        raise Exception(f"Unexpected error during deletion: {e}")
+        raise Exception(f"Unexpected error during deletion: {str(e)}")
 
 
 def list_centers_db():
