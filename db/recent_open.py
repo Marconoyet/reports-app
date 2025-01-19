@@ -97,10 +97,17 @@ def list_recent_open_db(user_id):
         ).filter(
             Template.id.in_(clicked["templates"])).all()
 
-        recent_reports = db.session.query(Report).options(
+        # Fetch reports and join with the Template table to get the template image
+        recent_reports = db.session.query(
+            Report,
+            Template.template_image  # Select the template image
+        ).join(
+            Template, Report.template_id == Template.id
+        ).options(
             defer(Report.report_file)  # Defer loading large file
         ).filter(
-            Report.id.in_(clicked["reports"])).all()
+            Report.id.in_(clicked["reports"])
+        ).all()
 
         # Sort the fetched results based on the order in the clicked list
         recent_folders_dict = sorted(
@@ -112,7 +119,13 @@ def list_recent_open_db(user_id):
             key=lambda template: clicked["templates"].index(template["id"])
         )
         recent_reports_dict = sorted(
-            [report.to_dict() for report in recent_reports],
+            [
+                {
+                    **report.to_dict(),
+                    "report_image": f"data:image/png;base64,{base64.b64encode(template_image).decode('utf-8')}" if template_image else None
+                }
+                for report, template_image in recent_reports
+            ],
             key=lambda report: clicked["reports"].index(report["id"])
         )
 
@@ -126,6 +139,7 @@ def list_recent_open_db(user_id):
         raise Exception("User not found")
     except Exception as e:
         raise Exception(f"Error fetching clicked items: {e}")
+
 
 
 def clear_recent_open_db():
